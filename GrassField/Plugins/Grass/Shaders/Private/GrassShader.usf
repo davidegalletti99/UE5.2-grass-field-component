@@ -1,0 +1,160 @@
+#include "/Engine/Public/Platform.ush"
+
+float GlobalWorldTime;
+#include "Noise.usf"
+
+float MinHeight;
+float MaxHeight;
+
+Buffer<float> Points;
+
+float3 Position;
+float Lambda;
+
+int Size;
+
+RWBuffer<float> GrassPoints;
+RWBuffer<int> GrassTriangles;
+
+static float G = 9.81;
+
+float3 quadBez(float p0, float p1, float p2, float t)
+{
+    return lerp(p0, lerp(p1, p2, t), t);
+}
+
+void addPoint(int pointIdx, float3 p)
+{
+    GrassPoints[pointIdx + 0] = p.x;
+    GrassPoints[pointIdx + 1] = p.y;
+    GrassPoints[pointIdx + 2] = p.z;
+}
+
+void addTri(int triIdx, int idx1, int idx2, int idx3)
+{
+    GrassTriangles[triIdx + 0] = idx1;
+    GrassTriangles[triIdx + 1] = idx2;
+    GrassTriangles[triIdx + 2] = idx3;
+}
+
+
+//  z
+//  |
+//  |
+//  |         * *         -
+//  |    y  *     *       |
+//  |   /  *              | height
+//  |  /  *               |
+//  | /  *                |
+//  |/   *                -
+//  +-------------------------- x
+//  0
+float3 computeInitialVelocity(float3 seed, float height)
+{
+    float3 v0 = seed;
+    v0.xy += sign(v0.xy) * 1.5;
+    v0.z = sqrt(2 * G * height);
+    return v0;
+}
+
+float computeHeight(float3 ext)
+{
+    return lerp(MinHeight, MaxHeight, (ext.x + ext.y + ext.z) / 3);
+}
+
+//  z
+//  |
+//  |
+//  |         * *
+//  |    y  *     * pe (t = te)
+//  |   /  *    
+//  |  /  *
+//  | /  *
+//  |/   * p0 (t = 0)
+//  +-------------------------- x
+//  0
+void createGrass(int idx, int steps, float3 p0, float3 v0, float epsilon, float height)
+{
+    float te = (v0.z - epsilon) / G;
+    float maxThickness = height * .02;
+    float3 normal = normalize(cross(v0, float3(v0.xy, 0)));
+    normal.z = 0;
+    
+    int pointIdx = idx * (steps * 2 + 1);
+    int triangleIdx = idx * (steps * 2 - 1) * 2; // '* 2' per i triangoli dietro
+    
+    int grassPIdx = pointIdx * 3;
+    int grassTIdx = triangleIdx * 3;
+    int currPIdx = pointIdx;
+    for (int i = 0; i < steps; i++, grassTIdx += 12, grassPIdx += 6, currPIdx += 2)
+    {
+        float perc = float(i) / steps;
+        float t = perc * te;
+        
+        float3 p = p0 + v0 * t;
+        p.z -= t * t * G / 2;
+        
+        float thickness = quadBez(maxThickness, maxThickness * 0.85, 0, perc);
+        
+        // p1
+        float3 p1 = p - normal * thickness;
+        addPoint(grassPIdx + 0, p1);
+        
+        // p2
+        float3 p2 = p + normal * thickness;
+        addPoint(grassPIdx + 3, p2);
+        
+           
+        if (i < steps - 1)
+        {
+            // t1
+            addTri(grassTIdx + 0, currPIdx + 0, currPIdx + 1, currPIdx + 3);
+            addTri(grassTIdx + 3, currPIdx + 0, currPIdx + 3, currPIdx + 1);
+                
+            // t2
+            addTri(grassTIdx + 6, currPIdx + 0, currPIdx + 3, currPIdx + 2);
+            addTri(grassTIdx + 9, currPIdx + 0, currPIdx + 2, currPIdx + 3);
+        }
+        else
+        {
+            // last triangle
+            addTri(grassTIdx + 0, currPIdx + 0, currPIdx + 1, currPIdx + 2);
+            addTri(grassTIdx + 3, currPIdx + 0, currPIdx + 2, currPIdx + 1);
+        }
+        
+    }
+    
+    
+    // last point
+    float3 pe = p0 + v0 * te;
+    pe.z -= te * te * G / 2;
+    addPoint(grassPIdx, pe);
+}
+
+[numthreads(THREADS_X, THREADS_Y, THREADS_Z)]
+void Main(
+	uint3 DispatchThreadId : SV_DispatchThreadID,
+	uint3 GroupThreadId : SV_GroupThreadID,
+	uint3 GroupId : SV_GroupID,
+	uint GroupIndex : SV_GroupIndex)
+{
+    
+    int3 threadIdx = (int3) DispatchThreadId;
+    
+    if (threadIdx.x >= Size)
+        return;
+    
+    int idx = threadIdx.x * 3;
+    float3 p0 = float3( Points[idx + 0],
+                        Points[idx + 1],
+                        Points[idx + 2] );
+    
+    // rand initial velocity
+    float3 ext = rand3(p0);
+    float height = computeHeight(ext);
+    float3 v0 = computeInitialVelocity(ext, height);
+    float epsilon = (snoise(p0 / 1000) - 0.5f) * Lambda;
+    
+    createGrass(threadIdx.x, 3, p0, v0, epsilon, height);
+    
+}

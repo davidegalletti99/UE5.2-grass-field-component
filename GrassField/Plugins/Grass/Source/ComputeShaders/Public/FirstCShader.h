@@ -150,7 +150,6 @@ public:
 // ------------------- Compute Shader Library -------------------
 // --------------------------------------------------------------
 
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnFirstCShaderLibrary_AsyncExecutionCompleted, const TArray<float>, Value);
 
 class COMPUTESHADERS_API FirstCShaderExecutor 
 {
@@ -162,6 +161,7 @@ private:
 
 };
 
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnFirstCShaderLibrary_AsyncExecutionCompleted, const TArray<float>, Value);
 
 UCLASS()
 class COMPUTESHADERS_API UFirstCShaderLibrary_AsyncExecution : public UBlueprintAsyncActionBase

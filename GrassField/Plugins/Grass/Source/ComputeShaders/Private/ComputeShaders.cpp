@@ -1,4 +1,4 @@
-#include "ComputeShaders/Public/ComputeShaders.h"
+#include "ComputeShaders.h"
 
 #include "Misc/Paths.h"
 #include "Misc/FileHelper.h"
@@ -18,7 +18,7 @@ void FComputeShadersModule::StartupModule()
 
 	// Maps virtual shader source directory to the plugin's actual shaders directory.
 	FString PluginShaderDir = FPaths::Combine(IPluginManager::Get().FindPlugin(TEXT("Grass"))->GetBaseDir(), TEXT("Shaders/Private"));
-	AddShaderSourceDirectoryMapping(TEXT("/Grass"), PluginShaderDir);
+	AddShaderSourceDirectoryMapping(TEXT("/Shaders"), PluginShaderDir);
 }
 
 void FComputeShadersModule::ShutdownModule()

@@ -38,6 +38,8 @@ public class Grass : ModuleRules
 				"Engine",
 				"Slate",
 				"SlateCore",
+                "ProceduralMeshComponent",
+				"ComputeShaders"
 				// ... add private dependencies that you statically link with here ...	
 			}
 			);

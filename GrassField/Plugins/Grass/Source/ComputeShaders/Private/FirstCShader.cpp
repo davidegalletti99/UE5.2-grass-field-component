@@ -1,4 +1,4 @@
-#include "ComputeShaders/Public/FirstCShader.h"
+#include "FirstCShader.h"
 
 #include "GlobalShader.h"
 #include "UnifiedBuffer.h"
@@ -25,7 +25,7 @@ DECLARE_CYCLE_STAT(TEXT("FirstCShader Execute"), STAT_FirstCShader_Execute, STAT
 //																		   |
 //																		   v
 //                        ShaderType             ShaderPath      Shader function name   Type
-IMPLEMENT_GLOBAL_SHADER(FFirstCShader, "/Grass/FirstCShader.usf", "FirstCShader", SF_Compute);
+IMPLEMENT_GLOBAL_SHADER(FFirstCShader, "/Shaders/FirstCShader.usf", "FirstCShader", SF_Compute);
 
 
 bool FFirstCShader::ShouldCompilePermutation(const FGlobalShaderPermutationParameters& Parameters)

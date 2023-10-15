@@ -26,7 +26,9 @@ public class ComputeShaders: ModuleRules
 			"Renderer",
 			"RenderCore",
 			"RHI",
-			"Projects"
+			"Projects",
+			"ProceduralMeshComponent",
+			"Niagara"
 		});
 		
 		if (Target.bBuildEditor == true)

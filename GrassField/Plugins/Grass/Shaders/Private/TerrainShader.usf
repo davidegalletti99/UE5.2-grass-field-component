@@ -1,0 +1,52 @@
+#include "/Engine/Public/Platform.ush"
+
+float GlobalWorldTime;
+#include "Noise.usf"
+
+int Width;
+int Height;
+int MaxAltitude;
+int Spacing;
+
+RWBuffer<float> Points;
+RWBuffer<int> Triangles;
+
+[numthreads(THREADS_X, THREADS_Y, THREADS_Z)]
+void Main(
+	uint3 DispatchThreadId : SV_DispatchThreadID,
+	uint3 GroupThreadId : SV_GroupThreadID,
+	uint3 GroupId : SV_GroupID,
+	uint GroupIndex : SV_GroupIndex)
+{
+    float seed = rand2(GlobalWorldTime);
+    int3 threadIdx = (int3) DispatchThreadId;
+    
+    int idx = threadIdx.y * Width + threadIdx.x;
+    int pointIdx = idx * 3;
+    
+    float2 XYCoord = threadIdx.xy - float2(Width, Height) / 2.0f;
+    XYCoord = XYCoord * Spacing;
+    
+    Points[pointIdx + 0] = XYCoord.x;
+    Points[pointIdx + 1] = XYCoord.y;
+    Points[pointIdx + 2] = (snoise(threadIdx.xy / float2(Width, Height) + seed) - 0.5) * MaxAltitude;
+	
+    if (threadIdx.x < Width - 1 && threadIdx.y < Height - 1)
+    {
+        int triangleIdx = (idx - threadIdx.y) * 2 * 3;
+		//	p1       p2
+		//	 *-------*
+		//	 |     / |
+		//	 |   /   |
+		//	 | /     |
+		//	 *-------*
+		//	p3       p4
+        Triangles[triangleIdx + 0] = idx;                   // p1
+        Triangles[triangleIdx + 1] = idx + Width;           // p3
+        Triangles[triangleIdx + 2] = idx + 1;               // p2
+
+        Triangles[triangleIdx + 3] = idx + 1;               // p2
+        Triangles[triangleIdx + 4] = idx + Width;           // p3
+        Triangles[triangleIdx + 5] = idx + Width + 1;       // p4
+    }
+}

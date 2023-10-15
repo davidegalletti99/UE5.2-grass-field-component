@@ -25,5 +25,15 @@
 			"Type": "Runtime",
 			"LoadingPhase": "PostConfigInit"
 		}
+	],
+	"Plugins": [
+		{
+			"Name": "ProceduralMeshComponent",
+			"Enabled": true
+		},
+		{
+			"Name": "Niagara",
+			"Enabled": true
+		}
 	]
 }
