@@ -11,17 +11,10 @@ UGrassFieldComponent::UGrassFieldComponent()
 
 void UGrassFieldComponent::SampleGrassData()
 {
-	this->points.Empty();
+	Init();
+
 	grassMesh->ClearAllMeshSections();
 	FProcMeshSection* meshSection = mesh->GetProcMeshSection(0);
-
-	for (int i = 0; i < gridSize; i++)
-	{
-		for (int j = 0; j < gridSize; j++)
-		{
-			int chunkId = i + j * gridSize;
-		}
-	}
 	for (FProcMeshVertex vertex : meshSection->ProcVertexBuffer)
 	{
 		FVector p = vertex.Position;
@@ -44,19 +37,12 @@ void UGrassFieldComponent::SampleGrassData()
 
 			if (GetWorld()->LineTraceSingleByChannel(hit, start, end, mesh->GetCollisionObjectType())) 
 			{
-				points.Add(hit.ImpactPoint);
+				AddGrassData(hit.ImpactPoint);
 			}
 
 
 		}
 	}
-}
-
-
-void UGrassFieldComponent::ComputeGrass()
-{
-	GrassShaderExecutor exec;
-	exec.Execute((float)GetWorld()->TimeSeconds, lambda, points, minHeight, maxHeight, FVector(0, 1, 0), grassMesh, 0);
 }
 
 
@@ -69,10 +55,10 @@ void UGrassFieldComponent::Init()
 
 	for (int i = 0; i < gridSize; i++)
 	{
-		double cx = stepX * i + stepX / 2 - bounds.GetSize().X / 2 + bounds.GetCenter().X;
+		double cx = (stepX * i + stepX / 2) + (bounds.GetCenter().X - bounds.GetSize().X / 2);
 		for (int j = 0; j < gridSize; j++)
 		{
-			double cy = stepY * j + stepY / 2 - bounds.GetSize().Y / 2 + bounds.GetCenter().Y;
+			double cy = (stepY * j + stepY / 2) + (bounds.GetCenter().Y - bounds.GetSize().Y / 2);
 
 			uint32 id = i + j * gridSize;
 			chunks.Add(GrassChunk(TArray<FVector>(), FVector(cx, cy, 0), id));
@@ -83,27 +69,27 @@ void UGrassFieldComponent::Init()
 
 void UGrassFieldComponent::AddGrassData(FVector point)
 {
-	GrassChunk& nearestChunk = chunks[0];
-	float minDist = (point - nearestChunk.center).Length();
+	int id = 0;
+	float minDist = (point - chunks[0].center).Length();
 
-	for (GrassChunk& chunk : chunks)
+	for (int i = 1; i < chunks.Num(); i++)
 	{
-		float dist = (point - chunk.center).Length();
+		float dist = (point - chunks[i].center).Length();
 		if (dist < minDist)
 		{
 			minDist = dist;
-			nearestChunk = chunk;
+			id = i;
 		}
 	}
 
-	nearestChunk.AddGrassData(point, FVector2D());
+	chunks[id].AddGrassData(point, FVector2D());
 }
 
-//void UGrassFieldComponent::ComputeGrass()
-//{
-//	float globalTime = (float)GetWorld()->TimeSeconds;
-//	for (GrassChunk& chunk : chunks)
-//	{
-//		chunk.ComputeGrass(globalTime, lambda, minHeight, maxHeight, grassMesh);
-//	}
-//}
+void UGrassFieldComponent::ComputeGrass()
+{
+	float globalTime = (float)GetWorld()->TimeSeconds;
+	for (GrassChunk& chunk : chunks)
+	{
+		chunk.ComputeGrass(globalTime, lambda, minHeight, maxHeight, grassMesh);
+	}
+}
