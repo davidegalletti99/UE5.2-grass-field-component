@@ -52,24 +52,34 @@ struct COMPUTESHADERS_API FGrassShaderDispatchParams
 	float GlobalWorldTime;
 	float MinHeight;
 	float MaxHeight;
-	TArray<float> Points;
+	TArray<FVector4f> Points;
 	FVector Position;
+	FVector CameraDirection;
 	float Lambda;
 
 
-	FGrassShaderDispatchParams(float globalWorlTime, FVector position, TArray<FVector> points, float minHeight, float maxHeight, float lambda)
-		: X((int)points.Num() / NUM_THREADS_GrassShader_X + (int)(points.Num() % NUM_THREADS_GrassShader_X > 0)), Y(1), Z(1)
+	FGrassShaderDispatchParams(
+		float globalWorlTime, 
+		FVector position, 
+		TArray<FVector> points, 
+		float minHeight, 
+		float maxHeight, 
+		FVector cameraDirection, 
+		float lambda)
+		:	X((int)points.Num() / NUM_THREADS_GrassShader_X + (int)(points.Num() % NUM_THREADS_GrassShader_X > 0)), 
+			Y(1), 
+			Z(1),
+		GlobalWorldTime(globalWorlTime),
+		MinHeight(minHeight),
+		MaxHeight(maxHeight),
+		Lambda(lambda),
+		Position(position),
+		CameraDirection(cameraDirection)
+
 	{
-		MinHeight = minHeight;
-		MaxHeight = maxHeight;
-		Position = position;
-		Lambda = lambda;
-		GlobalWorldTime = globalWorlTime;
 		for (auto point : points)
 		{
-			Points.Add(point.X);
-			Points.Add(point.Y);
-			Points.Add(point.Z);
+			Points.Add(FVector4f(FVector3f(point), 0.0));
 		}
 	}
 };
@@ -91,19 +101,19 @@ public:
 	using FPermutationDomain = TShaderPermutationDomain<FGrassShader_Perm_TEST>;
 
 	BEGIN_SHADER_PARAMETER_STRUCT(FGrassShaderDispatchParams, COMPUTESHADERS_API)
-
+		SHADER_PARAMETER(FVector3f, Position)
+		SHADER_PARAMETER(FVector3f, CameraDirection)
+		SHADER_PARAMETER(int, Size)
 		SHADER_PARAMETER(float, GlobalWorldTime)
+		SHADER_PARAMETER(float, Lambda)
 		SHADER_PARAMETER(float, MinHeight)
 		SHADER_PARAMETER(float, MaxHeight)
-		SHADER_PARAMETER_RDG_BUFFER_SRV(TArray<float>, Points)
-		SHADER_PARAMETER(FVector3f, Position)
-		SHADER_PARAMETER(float, Lambda)
-		SHADER_PARAMETER(int, Size)
+		SHADER_PARAMETER_RDG_BUFFER_SRV(TArray<FVector4f>, Points)
 		SHADER_PARAMETER_RDG_BUFFER_UAV(RWBuffer<float>, GrassPoints)
 		SHADER_PARAMETER_RDG_BUFFER_UAV(RWBuffer<int>, GrassTriangles)
-		END_SHADER_PARAMETER_STRUCT()
+	END_SHADER_PARAMETER_STRUCT()
 
-		using FParameters = FGrassShaderDispatchParams;
+	using FParameters = FGrassShaderDispatchParams;
 
 	static bool ShouldCompilePermutation(const FGlobalShaderPermutationParameters& Parameters);
 
@@ -148,7 +158,7 @@ class COMPUTESHADERS_API GrassShaderExecutor
 {
 public:
 	GrassShaderExecutor();
-	void Execute(float globalWorldTime, float lambda, TArray<FVector> points, float minHeight, float maxHeight, UProceduralMeshComponent* meshComponent);
+	void Execute(float globalWorldTime, float lambda, TArray<FVector> points, float minHeight, float maxHeight, FVector cameraDirection, UProceduralMeshComponent* meshComponent, int sectionId);
 
 private:
 

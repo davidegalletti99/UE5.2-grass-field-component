@@ -7,7 +7,10 @@
 #include "Components/BrushComponent.h"
 #include "ProceduralMeshComponent.h"
 #include "Engine/World.h"
+
 #include "GrassShader.h"
+#include "GrassChunk.h"
+#include "Math.h"
 
 #include "GrassFieldComponent.generated.h"
 
@@ -18,17 +21,28 @@ UCLASS()
 class GRASS_API UGrassFieldComponent : public UPrimitiveComponent
 {
 	GENERATED_BODY()
+
 public:
 	UGrassFieldComponent();
 
-
 	UProceduralMeshComponent* mesh;
-
 	UProceduralMeshComponent* grassMesh;
-private:
 
+
+	void Init();
+
+private:
+	TArray<GrassChunk> chunks;
 	TArray<FVector> points;
 
+	UPROPERTY(EditAnywhere, Category = "Grass")
+		FBox bounds = FBox(FVector(-160, -160, -1), FVector(160, 160, 1));
+
+	UPROPERTY(EditAnywhere, Category = "Grass")
+		int32 gridSize = 4;
+
+	UPROPERTY(EditAnywhere, Category = "Grass")
+		float cellsYWidth = 10;
 
 	UPROPERTY(EditAnywhere, Category = "Grass")
 		float lambda = 10;
@@ -45,11 +59,11 @@ private:
 	UPROPERTY(EditAnywhere, Category = "Grass")
 		int32 minHeight = 1;
 
-
 	UFUNCTION(CallInEditor, Category = "Grass")
 		void SampleGrassData();
 
 	UFUNCTION(CallInEditor, Category = "Grass")
 		void ComputeGrass();
 	
+	void AddGrassData(FVector point);
 };

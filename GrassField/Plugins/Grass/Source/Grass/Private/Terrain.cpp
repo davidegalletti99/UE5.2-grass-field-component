@@ -20,7 +20,7 @@ ATerrain::ATerrain()
 	grassFieldComponent->mesh = meshComponent;
 	this->AddComponent(TEXT("Grass Field"), false, FTransform(), grassFieldComponent);
 
-
+	grassFieldComponent->Init();
 }
 
 // Called when the game starts or when spawned
@@ -40,6 +40,6 @@ void ATerrain::Tick(float DeltaTime)
 void ATerrain::ComputeMesh()
 {
 	TerrainShaderExecutor texec;
-	texec.Execute((float)GetWorld()->TimeSeconds, width, height, maxAltitude, spacing, meshComponent);
+	texec.Execute((float)GetWorld()->TimeSeconds, width, height, amplitude, spacing, meshComponent);
 }
 

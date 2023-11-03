@@ -2,19 +2,26 @@
 
 
 #include "GrassFieldComponent.h"
-#include "Math.h"
-#include "GrassShader.h"
 
 UGrassFieldComponent::UGrassFieldComponent()
 {
 
 }
 
+
 void UGrassFieldComponent::SampleGrassData()
 {
 	this->points.Empty();
 	grassMesh->ClearAllMeshSections();
 	FProcMeshSection* meshSection = mesh->GetProcMeshSection(0);
+
+	for (int i = 0; i < gridSize; i++)
+	{
+		for (int j = 0; j < gridSize; j++)
+		{
+			int chunkId = i + j * gridSize;
+		}
+	}
 	for (FProcMeshVertex vertex : meshSection->ProcVertexBuffer)
 	{
 		FVector p = vertex.Position;
@@ -43,11 +50,60 @@ void UGrassFieldComponent::SampleGrassData()
 
 		}
 	}
-
 }
+
 
 void UGrassFieldComponent::ComputeGrass()
 {
 	GrassShaderExecutor exec;
-	exec.Execute((float)GetWorld()->TimeSeconds, lambda, points, minHeight, maxHeight, grassMesh);
+	exec.Execute((float)GetWorld()->TimeSeconds, lambda, points, minHeight, maxHeight, FVector(0, 1, 0), grassMesh, 0);
 }
+
+
+void UGrassFieldComponent::Init()
+{
+	chunks.Empty();
+
+	double stepX = bounds.GetSize().X / gridSize;
+	double stepY = bounds.GetSize().Y / gridSize;
+
+	for (int i = 0; i < gridSize; i++)
+	{
+		double cx = stepX * i + stepX / 2 - bounds.GetSize().X / 2 + bounds.GetCenter().X;
+		for (int j = 0; j < gridSize; j++)
+		{
+			double cy = stepY * j + stepY / 2 - bounds.GetSize().Y / 2 + bounds.GetCenter().Y;
+
+			uint32 id = i + j * gridSize;
+			chunks.Add(GrassChunk(TArray<FVector>(), FVector(cx, cy, 0), id));
+		}
+	}
+
+}
+
+void UGrassFieldComponent::AddGrassData(FVector point)
+{
+	GrassChunk& nearestChunk = chunks[0];
+	float minDist = (point - nearestChunk.center).Length();
+
+	for (GrassChunk& chunk : chunks)
+	{
+		float dist = (point - chunk.center).Length();
+		if (dist < minDist)
+		{
+			minDist = dist;
+			nearestChunk = chunk;
+		}
+	}
+
+	nearestChunk.AddGrassData(point, FVector2D());
+}
+
+//void UGrassFieldComponent::ComputeGrass()
+//{
+//	float globalTime = (float)GetWorld()->TimeSeconds;
+//	for (GrassChunk& chunk : chunks)
+//	{
+//		chunk.ComputeGrass(globalTime, lambda, minHeight, maxHeight, grassMesh);
+//	}
+//}

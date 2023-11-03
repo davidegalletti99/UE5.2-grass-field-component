@@ -24,7 +24,7 @@ class GRASS_API ATerrain : public AActor
 		int32 height = 256;
 
 	UPROPERTY(EditAnywhere, Category = "Terrain")
-		int32 maxAltitude = 200;
+		int32 amplitude = 200;
 
 	UPROPERTY(EditAnywhere, Category = "Terrain")
 		int32 spacing = 10;
@@ -44,6 +44,21 @@ class GRASS_API ATerrain : public AActor
 public:	
 	// Sets default values for this actor's properties
 	ATerrain();
+
+	int32 GetWidth() 
+	{
+		return width;
+	}
+
+	int32 GetHeight()
+	{
+		return height;
+	}
+
+	int32 GetAmplitude()
+	{
+		return amplitude;
+	}
 
 protected:
 	// Called when the game starts or when spawned
