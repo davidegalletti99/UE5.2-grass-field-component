@@ -1,5 +1,6 @@
 #include "/Engine/Public/Platform.ush"
 
+
 float GlobalWorldTime;
 #include "Noise.usf"
 
@@ -13,9 +14,10 @@ float3 CameraDirection;
 int Size;
 Buffer<float4> Points;
 
-
 RWBuffer<float4> GrassPoints;
+
 RWBuffer<int> GrassTriangles;
+
 
 static float G = 9.81;
 static int maxSteps = 7;
@@ -167,6 +169,5 @@ void Main(
     float3 p0 = Points[DispatchThreadId.x].xyz;
     
     float steps = computeLODSteps(p0);
-    
     createGrass(DispatchThreadId.x, p0, steps);
 }

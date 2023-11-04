@@ -11,13 +11,14 @@ UGrassFieldComponent::UGrassFieldComponent()
 
 void UGrassFieldComponent::SampleGrassData()
 {
-	Init();
+	for (GrassChunk& chunk : chunks)
+		chunk.Empty();
 
 	grassMesh->ClearAllMeshSections();
 	FProcMeshSection* meshSection = mesh->GetProcMeshSection(0);
 	for (FProcMeshVertex vertex : meshSection->ProcVertexBuffer)
 	{
-		FVector p = vertex.Position;
+		FVector p = vertex.Position + mesh->GetActorPositionForRenderer();
 		for (float i = 0; i / density < 1.0f; i++)
 		{
 			float offsetX = (FMath::SRand() - 0.5) * displacement;
@@ -46,22 +47,32 @@ void UGrassFieldComponent::SampleGrassData()
 }
 
 
-void UGrassFieldComponent::Init()
+void UGrassFieldComponent::ChunksInit()
 {
+	bounds = mesh->GetLocalBounds().GetBox();
+
 	chunks.Empty();
 
 	double stepX = bounds.GetSize().X / gridSize;
 	double stepY = bounds.GetSize().Y / gridSize;
+	double worldOffX = bounds.GetCenter().X - bounds.GetSize().X / 2;
+	double worldOffY = bounds.GetCenter().Y - bounds.GetSize().Y / 2;
+
+	FVector pMin, pMax;
+	pMin.Z = bounds.GetCenter().Z - bounds.GetSize().Z / 2;
+	pMax.Z = bounds.GetCenter().Z + bounds.GetSize().Z / 2;
 
 	for (int i = 0; i < gridSize; i++)
 	{
-		double cx = (stepX * i + stepX / 2) + (bounds.GetCenter().X - bounds.GetSize().X / 2);
+		pMin.X = stepX * i + worldOffX;
+		pMax.X = stepX * (i + 1) + worldOffX;
 		for (int j = 0; j < gridSize; j++)
 		{
-			double cy = (stepY * j + stepY / 2) + (bounds.GetCenter().Y - bounds.GetSize().Y / 2);
+			pMin.Y = stepY * j + worldOffY;
+			pMax.Y = stepY * (j + 1) + worldOffY;
 
 			uint32 id = i + j * gridSize;
-			chunks.Add(GrassChunk(TArray<FVector>(), FVector(cx, cy, 0), id));
+			chunks.Add(GrassChunk(TArray<FVector>(), FBox(pMin, pMax), id));
 		}
 	}
 
@@ -69,20 +80,11 @@ void UGrassFieldComponent::Init()
 
 void UGrassFieldComponent::AddGrassData(FVector point)
 {
-	int id = 0;
-	float minDist = (point - chunks[0].center).Length();
-
-	for (int i = 1; i < chunks.Num(); i++)
+	bool isAdded = false;
+	for (int i = 0; i < chunks.Num() && !isAdded; i++)
 	{
-		float dist = (point - chunks[i].center).Length();
-		if (dist < minDist)
-		{
-			minDist = dist;
-			id = i;
-		}
+		isAdded = chunks[i].AddGrassData(point, FVector2D());
 	}
-
-	chunks[id].AddGrassData(point, FVector2D());
 }
 
 void UGrassFieldComponent::ComputeGrass()

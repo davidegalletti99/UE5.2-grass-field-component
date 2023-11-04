@@ -20,7 +20,7 @@ ATerrain::ATerrain()
 	grassFieldComponent->mesh = meshComponent;
 	this->AddComponent(TEXT("Grass Field"), false, FTransform(), grassFieldComponent);
 
-	grassFieldComponent->Init();
+	grassFieldComponent->ChunksInit();
 }
 
 // Called when the game starts or when spawned

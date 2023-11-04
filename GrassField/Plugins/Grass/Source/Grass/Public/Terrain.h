@@ -41,11 +41,19 @@ class GRASS_API ATerrain : public AActor
 	UFUNCTION(CallInEditor, Category = "Terrain")
 		void ComputeMesh();
 
+
+
+protected:
+	// Called when the game starts or when spawned
+	virtual void BeginPlay() override;
+
 public:	
-	// Sets default values for this actor's properties
+	// Called every frame
+	virtual void Tick(float DeltaTime) override;
+
 	ATerrain();
 
-	int32 GetWidth() 
+	int32 GetWidth()
 	{
 		return width;
 	}
@@ -59,14 +67,5 @@ public:
 	{
 		return amplitude;
 	}
-
-protected:
-	// Called when the game starts or when spawned
-	virtual void BeginPlay() override;
-
-public:	
-	// Called every frame
-	virtual void Tick(float DeltaTime) override;
-
 
 };

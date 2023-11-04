@@ -154,12 +154,25 @@ public:
 // ------------------- Compute Shader Library -------------------
 // --------------------------------------------------------------
 
-class COMPUTESHADERS_API GrassShaderExecutor
+class COMPUTESHADERS_API GrassShaderExecutor : public FAsyncTaskBase
 {
-public:
-	GrassShaderExecutor();
-	void Execute(float globalWorldTime, float lambda, TArray<FVector> points, float minHeight, float maxHeight, FVector cameraDirection, UProceduralMeshComponent* meshComponent, int sectionId);
+	void DoTaskWork();
+	bool TryAbandonTask();
 
+public:
+	int sectionId;
+	float globalWorldTime; 
+
+	UProceduralMeshComponent* meshComponent;
+
+	float lambda;
+	float minHeight;
+	float maxHeight;
+
+	TArray<FVector> points;
+	FVector cameraDirection;
+
+	GrassShaderExecutor();
 private:
 
 };

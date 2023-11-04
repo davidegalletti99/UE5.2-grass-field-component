@@ -27,14 +27,15 @@ public:
 	uint32 id;
 
 	FVector center;
+	FBox bounds;
 	TArray<FVector> data;
 
 	GrassChunk();
-	GrassChunk(FVector center, uint32 id);
-	GrassChunk(TArray<FVector> data, FVector center, uint32 id);
+	GrassChunk(FBox bounds, uint32 id);
+	GrassChunk(TArray<FVector> data, FBox bounds, uint32 id);
 	
 	~GrassChunk();
-	void AddGrassData(FVector point, FVector2D uv);
-	void Empty();
+	bool AddGrassData(FVector point, FVector2D uv);
 	void ComputeGrass(float globalTime, float lambda, float minHeight, float maxHeight, UProceduralMeshComponent* grassMesh);
+	void Empty();
 };

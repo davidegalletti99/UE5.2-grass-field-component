@@ -29,7 +29,8 @@ public:
 	UProceduralMeshComponent* grassMesh;
 
 
-	void Init();
+	UFUNCTION(CallInEditor, Category = "Grass")
+		void ChunksInit();
 
 private:
 	TArray<GrassChunk> chunks;
@@ -38,7 +39,7 @@ private:
 		FBox bounds = FBox(FVector(-160, -160, -1), FVector(160, 160, 1));
 
 	UPROPERTY(EditAnywhere, Category = "Grass")
-		int32 gridSize = 4;
+		int32 gridSize = 2;
 
 	UPROPERTY(EditAnywhere, Category = "Grass")
 		float lambda = 10;
@@ -60,6 +61,6 @@ private:
 
 	UFUNCTION(CallInEditor, Category = "Grass")
 		void ComputeGrass();
-	
+
 	void AddGrassData(FVector point);
 };

@@ -64,7 +64,8 @@ void FGrassShader::ModifyCompilationEnvironment(
 void FGrassShaderInterface::DispatchRenderThread(
 	FRHICommandListImmediate& RHICmdList,
 	FGrassShaderDispatchParams& Params,
-	TFunction<void(TArray<FVector>& GrassPoints, TArray<int32>& GrassTriangles)> AsyncCallback)
+	TFunction<void(TArray<FVector>& GrassPoints, 
+	TArray<int32>& GrassTriangles)> AsyncCallback)
 {
 
 	FRDGBuilder GraphBuilder(RHICmdList);
@@ -83,6 +84,7 @@ void FGrassShaderInterface::DispatchRenderThread(
 		bool bIsShaderValid = ComputeShader.IsValid();
 
 		if (bIsShaderValid) {
+
 			FGrassShader::FParameters* PassParameters = GraphBuilder.AllocParameters<FGrassShader::FParameters>();
 
 			PassParameters->GlobalWorldTime = Params.GlobalWorldTime;
@@ -95,7 +97,7 @@ void FGrassShaderInterface::DispatchRenderThread(
 			PassParameters->CameraDirection = FVector3f(Params.CameraDirection);
 
 			const void* RawPointsData = (void*)Params.Points.GetData();
-			int NumPoints = Params.Points.Num();
+			int NumPoints = PassParameters->Size;
 			int PointsSize = sizeof(FVector4f);
 			FRDGBufferRef PointsBuffer = 
 				CreateUploadBuffer(GraphBuilder, TEXT("PointsBuffer"), PointsSize, NumPoints, 
@@ -104,13 +106,13 @@ void FGrassShaderInterface::DispatchRenderThread(
 			PassParameters->Points = GraphBuilder.CreateSRV(FRDGBufferSRVDesc(PointsBuffer, EPixelFormat::PF_A32B32G32R32F));
 
 			int32 steps = 7;
-			int32 NumGrassPoints = Params.Points.Num() * (steps * 2 + 1);
+			int32 NumGrassPoints = NumPoints * (steps * 2 + 1);
 			FRDGBufferRef GrassPointsBuffer = GraphBuilder.CreateBuffer(
 				FRDGBufferDesc::CreateBufferDesc(sizeof(FVector4f), NumGrassPoints), TEXT("GrassPointsBuffer"));
 			PassParameters->GrassPoints = GraphBuilder.CreateUAV(
 				FRDGBufferUAVDesc(GrassPointsBuffer, EPixelFormat::PF_A32B32G32R32F));
 
-			int32 NumGrassTriangles = Params.Points.Num() * (steps * 2 - 1) * 2 * 3;
+			int32 NumGrassTriangles = NumPoints * (steps * 2 - 1) * 2 * 3;
 			FRDGBufferRef GrassTrianglesBuffer = GraphBuilder.CreateBuffer(
 				FRDGBufferDesc::CreateBufferDesc(sizeof(int32), NumGrassTriangles), TEXT("GrassTrianglesBuffer"));
 			PassParameters->GrassTriangles = GraphBuilder.CreateUAV(
@@ -131,8 +133,9 @@ void FGrassShaderInterface::DispatchRenderThread(
 			int32 pointsBytes = sizeof(FVector4f) * NumGrassPoints;
 			int32 trianglesBytes = sizeof(int32) * NumGrassTriangles;
 
-			FRHIGPUBufferReadback* GPUPointsBufferReadback = new FRHIGPUBufferReadback(TEXT("ExecuteTerrainShaderPoints"));
-			FRHIGPUBufferReadback* GPUTrianglesBufferReadback = new FRHIGPUBufferReadback(TEXT("ExecuteTerrainShaderTriangles"));
+			FRHIGPUBufferReadback* GPUPointsBufferReadback = new FRHIGPUBufferReadback(TEXT("ExecuteGrassShaderPoints"));
+			FRHIGPUBufferReadback* GPUTrianglesBufferReadback = new FRHIGPUBufferReadback(TEXT("ExecuteGrassShaderTriangles"));
+			
 			AddEnqueueCopyPass(GraphBuilder, GPUPointsBufferReadback, GrassPointsBuffer, pointsBytes);
 			AddEnqueueCopyPass(GraphBuilder, GPUTrianglesBufferReadback, GrassTrianglesBuffer, trianglesBytes);
 
@@ -224,18 +227,28 @@ void FGrassShaderInterface::Dispatch(
 GrassShaderExecutor::GrassShaderExecutor()
 {}
 
-void GrassShaderExecutor::Execute(float globalWorldTime, float lambda, TArray<FVector> points, float minHeight, float maxHeight, FVector cameraDirection, UProceduralMeshComponent* meshComponent, int sectionId)
+void GrassShaderExecutor::DoTaskWork() 
 {
 	// Create a dispatch parameters struct and fill it the input array with our args
 	FGrassShaderDispatchParams* Params =
-		new FGrassShaderDispatchParams(globalWorldTime, FVector(0, 0, 0), points, minHeight, maxHeight, cameraDirection, lambda);
-	
+		new FGrassShaderDispatchParams(
+			globalWorldTime,
+			FVector(0, 0, 0),
+			points,
+			minHeight,
+			maxHeight,
+			cameraDirection,
+			lambda
+		);
+
 
 	// Dispatch the compute shader and wait until it completes
 	// Executes the compute shader and calls the TFunction when complete.
+
 	// Called when the results are back from the GPU.
-	FGrassShaderInterface::Dispatch(*Params, [this, meshComponent, Params, sectionId](TArray<FVector>& Points, TArray<int32>& Triangles)
+	FGrassShaderInterface::Dispatch(*Params, [this, Params](TArray<FVector>& Points, TArray<int32>& Triangles)
 		{
+			// Chiamata bloccante al MainThread
 			meshComponent->ClearMeshSection(sectionId);
 			meshComponent->CreateMeshSection(sectionId, Points, Triangles,
 				TArray<FVector>(), TArray<FVector2D>(), TArray<FColor>(), TArray<FProcMeshTangent>(), true);
@@ -244,4 +257,9 @@ void GrassShaderExecutor::Execute(float globalWorldTime, float lambda, TArray<FV
 			delete& Triangles;
 			delete Params;
 		});
+}
+
+bool GrassShaderExecutor::TryAbandonTask()
+{
+	return true;
 }
