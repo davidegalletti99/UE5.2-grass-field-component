@@ -62,9 +62,11 @@ public:
 	using FPermutationDomain = TShaderPermutationDomain<>;
 
 	BEGIN_SHADER_PARAMETER_STRUCT(FVoteShaderDispatchParams, COMPUTESHADERS_API)
-		SHADER_PARAMETER(FMatrix44f, VP)
-		SHADER_PARAMETER_RDG_BUFFER_SRV(TArray<FVector4f>, GrassDataIn)
-		SHADER_PARAMETER_RDG_BUFFER_UAV(RWBuffer<FVector4f>, GrassDataOut)
+		SHADER_PARAMETER(FMatrix44f, MATRIX_VP)
+		SHADER_PARAMETER(FVector4f, _CameraPosition)
+		SHADER_PARAMETER(float, _Distance) // cutoff distance
+		SHADER_PARAMETER_RDG_BUFFER_SRV(TArray<FVector4f>, _GrassDataBuffer)
+		SHADER_PARAMETER_RDG_BUFFER_UAV(RWBuffer<uint32>, _VoteBuffer)
 	END_SHADER_PARAMETER_STRUCT()
 
 	using FParameters = FVoteShaderDispatchParams;
@@ -89,10 +91,10 @@ public:
 	using FPermutationDomain = TShaderPermutationDomain<>;
 
 	BEGIN_SHADER_PARAMETER_STRUCT(FScanShaderDispatchParams, COMPUTESHADERS_API)
-		SHADER_PARAMETER(FMatrix44f, VP)
-		SHADER_PARAMETER_RDG_BUFFER_SRV(TArray<FVector4f>, GrassDataIn)
-		SHADER_PARAMETER_RDG_BUFFER_UAV(RWBuffer<FVector4f>, GrassDataOut)
-		END_SHADER_PARAMETER_STRUCT()
+		SHADER_PARAMETER_RDG_BUFFER_UAV(RWBuffer<uint32>, _VoteBuffer)
+		SHADER_PARAMETER_RDG_BUFFER_UAV(RWBuffer<uint32>, _ScanBuffer)
+		SHADER_PARAMETER_RDG_BUFFER_UAV(RWBuffer<uint32>, _GroupSumArray)
+	END_SHADER_PARAMETER_STRUCT()
 
 		using FParameters = FScanShaderDispatchParams;
 
@@ -117,9 +119,9 @@ public:
 	using FPermutationDomain = TShaderPermutationDomain<>;
 
 	BEGIN_SHADER_PARAMETER_STRUCT(FScanGroupSumsShaderDispatchParams, COMPUTESHADERS_API)
-		SHADER_PARAMETER(FMatrix44f, VP)
-		SHADER_PARAMETER_RDG_BUFFER_SRV(TArray<FVector4f>, GrassDataIn)
-		SHADER_PARAMETER_RDG_BUFFER_UAV(RWBuffer<FVector4f>, GrassDataOut)
+		SHADER_PARAMETER(int, _NumOfGroups)
+		SHADER_PARAMETER_RDG_BUFFER_UAV(RWBuffer<uint32>, _GroupSumArrayIn)
+		SHADER_PARAMETER_RDG_BUFFER_UAV(RWBuffer<uint32>, _GroupSumArrayOut)
 	END_SHADER_PARAMETER_STRUCT()
 
 		using FParameters = FScanGroupSumsShaderDispatchParams;
@@ -145,9 +147,11 @@ public:
 	using FPermutationDomain = TShaderPermutationDomain<>;
 
 	BEGIN_SHADER_PARAMETER_STRUCT(FCompactShaderDispatchParams, COMPUTESHADERS_API)
-		SHADER_PARAMETER(FMatrix44f, VP)
-		SHADER_PARAMETER_RDG_BUFFER_SRV(TArray<FVector4f>, GrassDataIn)
-		SHADER_PARAMETER_RDG_BUFFER_UAV(RWBuffer<FVector4f>, GrassDataOut)
+		SHADER_PARAMETER_RDG_BUFFER_SRV(TArray<FVector4f>, _GrassDataBuffer)
+		SHADER_PARAMETER_RDG_BUFFER_UAV(RWBuffer<uint32>, _VoteBuffer)
+		SHADER_PARAMETER_RDG_BUFFER_UAV(RWBuffer<uint32>, _ScanBuffer)
+		SHADER_PARAMETER_RDG_BUFFER_UAV(RWBuffer<uint32>, _GroupSumArray)
+		SHADER_PARAMETER_RDG_BUFFER_UAV(RWBuffer<FVector4f>, _CulledGrassOutputBuffer)
 		END_SHADER_PARAMETER_STRUCT()
 
 		using FParameters = FCompactShaderDispatchParams;

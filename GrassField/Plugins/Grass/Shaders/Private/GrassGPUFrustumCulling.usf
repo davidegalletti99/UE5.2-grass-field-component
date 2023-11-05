@@ -1,8 +1,25 @@
 #include "/Engine/Public/Platform.ush"
 
-float4x4 VP;
-Buffer<float4> GrassDataIn;
-RWBuffer<float4> GrassDataOut;
+#define NUM_THREAD_GROUPS_X 64
+
+Buffer<float4> _GrassDataBuffer;
+RWBuffer<uint> _VoteBuffer;
+RWBuffer<uint> _ScanBuffer;
+RWBuffer<uint> _GroupSumArray;
+RWBuffer<uint> _GroupSumArrayIn;
+RWBuffer<uint> _GroupSumArrayOut;
+Buffer<float4> _CulledGrassOutputBuffer;
+
+
+float4x4 MATRIX_VP;
+int _NumOfGroups;
+
+groupshared uint temp[2 * NUM_THREAD_GROUPS_X];
+groupshared uint grouptemp[2 * 1024];
+
+float4 _CameraPosition;
+float _Distance;
+
 
 
 [numthreads(THREADS_X, THREADS_Y, THREADS_Z)]
