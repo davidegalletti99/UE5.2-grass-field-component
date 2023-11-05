@@ -1,0 +1,46 @@
+#include "/Engine/Public/Platform.ush"
+
+float4x4 VP;
+Buffer<float4> GrassDataIn;
+RWBuffer<float4> GrassDataOut;
+
+
+[numthreads(THREADS_X, THREADS_Y, THREADS_Z)]
+void Vote(
+	uint3 DispatchThreadId : SV_DispatchThreadID,
+	uint3 GroupThreadId : SV_GroupThreadID,
+	uint3 GroupId : SV_GroupID,
+	uint GroupIndex : SV_GroupIndex)
+{
+	
+}
+
+[numthreads(THREADS_X, THREADS_Y, THREADS_Z)]
+void Scan(
+	uint3 DispatchThreadId : SV_DispatchThreadID,
+	uint3 GroupThreadId : SV_GroupThreadID,
+	uint3 GroupId : SV_GroupID,
+	uint GroupIndex : SV_GroupIndex)
+{
+	
+}
+
+[numthreads(THREADS_X, THREADS_Y, THREADS_Z)]
+void ScanGroupSums(
+	uint3 DispatchThreadId : SV_DispatchThreadID,
+	uint3 GroupThreadId : SV_GroupThreadID,
+	uint3 GroupId : SV_GroupID,
+	uint GroupIndex : SV_GroupIndex)
+{
+	
+}
+
+[numthreads(THREADS_X, THREADS_Y, THREADS_Z)]
+void Compact(
+	uint3 DispatchThreadId : SV_DispatchThreadID,
+	uint3 GroupThreadId : SV_GroupThreadID,
+	uint3 GroupId : SV_GroupID,
+	uint GroupIndex : SV_GroupIndex)
+{
+	
+}

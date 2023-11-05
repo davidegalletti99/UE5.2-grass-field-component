@@ -69,12 +69,10 @@ void FFirstCShaderInterface::DispatchRenderThread(
 	FFirstCShaderDispatchParams& Params,
 	TFunction<void(float OutputVal[10])> AsyncCallback)
 {
-	
-	// TODO: Capire perche' dopo questo @Params si corrompe
 	FRDGBuilder GraphBuilder(RHICmdList);
 
-	// Blocco di codice necessario per qualche motivo (problemi con nullptr al GraphBuilder)
-	// TODO: Capire il perché
+	// Blocco di codice necessario per limitare 
+	// lo Scope dell'RDG event definito appena sotto
 	{
 		SCOPE_CYCLE_COUNTER(STAT_FirstCShader_Execute);
 		DECLARE_GPU_STAT(FirstCShader)

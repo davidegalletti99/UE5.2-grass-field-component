@@ -62,5 +62,9 @@ private:
 	UFUNCTION(CallInEditor, Category = "Grass")
 		void ComputeGrass();
 
+
+	UFUNCTION(CallInEditor, Category = "Grass")
+		void Test();
+
 	void AddGrassData(FVector point);
 };

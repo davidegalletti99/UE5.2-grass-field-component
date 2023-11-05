@@ -20,11 +20,6 @@
 DECLARE_STATS_GROUP(TEXT("GrassShader"), STATGROUP_GrassShader, STATCAT_Advanced);
 DECLARE_CYCLE_STAT(TEXT("GrassShader Execute"), STAT_GrassShader_Execute, STATGROUP_GrassShader);
 
-// This will tell the engine to create the shader and where the shader entry point is.
-//																	 (Entry Point)
-//																		   |
-//																		   v
-//                       ShaderType           ShaderPath         Shader function name    Type
 IMPLEMENT_GLOBAL_SHADER(FGrassShader, "/Shaders/GrassShader.usf",       "Main"       , SF_Compute);
 
 
@@ -42,12 +37,6 @@ void FGrassShader::ModifyCompilationEnvironment(
 	FGlobalShader::ModifyCompilationEnvironment(Parameters, OutEnvironment);
 
 	const FPermutationDomain PermutationVector(Parameters.PermutationId);
-
-	/*
-	* Here you define constants that can be used statically in the shader code.
-	* Example:
-	*/
-	// OutEnvironment.SetDefine(TEXT("MY_CUSTOM_CONST"), TEXT("1"));
 
 	// These defines are used in the thread count section of our shader
 	OutEnvironment.SetDefine(TEXT("THREADS_X"), NUM_THREADS_GrassShader_X);
@@ -246,17 +235,18 @@ void GrassShaderExecutor::DoTaskWork()
 	// Executes the compute shader and calls the TFunction when complete.
 
 	// Called when the results are back from the GPU.
-	FGrassShaderInterface::Dispatch(*Params, [this, Params](TArray<FVector>& Points, TArray<int32>& Triangles)
-		{
-			// Chiamata bloccante al MainThread
-			meshComponent->ClearMeshSection(sectionId);
-			meshComponent->CreateMeshSection(sectionId, Points, Triangles,
-				TArray<FVector>(), TArray<FVector2D>(), TArray<FColor>(), TArray<FProcMeshTangent>(), true);
+	FGrassShaderInterface::Dispatch(*Params, 
+		[this, Params](TArray<FVector>& Points, TArray<int32>& Triangles)
+			{
+				// Chiamata bloccante al MainThread
+				meshComponent->ClearMeshSection(sectionId);
+				meshComponent->CreateMeshSection(sectionId, Points, Triangles,
+					TArray<FVector>(), TArray<FVector2D>(), TArray<FColor>(), TArray<FProcMeshTangent>(), true);
 
-			delete& Points;
-			delete& Triangles;
-			delete Params;
-		});
+				delete& Points;
+				delete& Triangles;
+				delete Params;
+			});
 }
 
 bool GrassShaderExecutor::TryAbandonTask()

@@ -2,12 +2,18 @@
 
 
 #include "GrassFieldComponent.h"
+#include "DispatchGrassGPUFrustumCulling.h"
 
 UGrassFieldComponent::UGrassFieldComponent()
 {
 
 }
+void UGrassFieldComponent::Test()
+{
+	FBaseGPUFrustumCullingParams* Params = new FBaseGPUFrustumCullingParams();
+	FDispatchGrassGPUFrustumCulling::Dispatch(*Params, [this]() {});
 
+}
 
 void UGrassFieldComponent::SampleGrassData()
 {
