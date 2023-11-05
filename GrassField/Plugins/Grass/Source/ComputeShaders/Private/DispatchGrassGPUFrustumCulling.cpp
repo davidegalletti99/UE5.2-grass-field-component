@@ -62,7 +62,7 @@ void FDispatchGrassGPUFrustumCulling::DispatchRenderThread(
 			GraphBuilder.AddPass(
 				RDG_EVENT_NAME("ExecuteVoteShader"),
 				VotePassParameters,
-				ERDGPassFlags::AsyncCompute,
+				ERDGPassFlags::Compute,
 				[&VotePassParameters, VoteComputeShader, VoteGroupCount](FRHIComputeCommandList& RHICmdList)
 				{
 					FComputeShaderUtils::Dispatch(
@@ -73,7 +73,7 @@ void FDispatchGrassGPUFrustumCulling::DispatchRenderThread(
 			GraphBuilder.AddPass(
 				RDG_EVENT_NAME("ExecuteScanShader"),
 				ScanPassParameters,
-				ERDGPassFlags::AsyncCompute,
+				ERDGPassFlags::Compute,
 				[&ScanPassParameters, ScanComputeShader, ScanGroupCount](FRHIComputeCommandList& RHICmdList)
 				{
 					FComputeShaderUtils::Dispatch(
@@ -84,7 +84,7 @@ void FDispatchGrassGPUFrustumCulling::DispatchRenderThread(
 			GraphBuilder.AddPass(
 				RDG_EVENT_NAME("ExecuteScanGroupSumsShader"),
 				ScanGroupSumsPassParameters,
-				ERDGPassFlags::AsyncCompute,
+				ERDGPassFlags::Compute,
 				[&ScanGroupSumsPassParameters, ScanGroupSumsComputeShader, ScanGroupSumsGroupCount](FRHIComputeCommandList& RHICmdList)
 				{
 					FComputeShaderUtils::Dispatch(
@@ -95,7 +95,7 @@ void FDispatchGrassGPUFrustumCulling::DispatchRenderThread(
 			GraphBuilder.AddPass(
 				RDG_EVENT_NAME("ExecuteCompactShader"),
 				CompactPassParameters,
-				ERDGPassFlags::AsyncCompute,
+				ERDGPassFlags::Compute,
 				[&CompactPassParameters, CompactComputeShader, CompactGroupCount](FRHIComputeCommandList& RHICmdList)
 				{
 					FComputeShaderUtils::Dispatch(
