@@ -22,16 +22,16 @@ public:
 	// Executes this shader on the render thread
 	static void DispatchRenderThread(
 		FRHICommandListImmediate& RHICmdList,
-		FBaseGPUFrustumCullingParams& Params,
+		FGPUFrustumCullingParams& Params,
 		TFunction<void()> AsyncCallback);
 
 	// Executes this shader on the render thread from the game thread via EnqueueRenderThreadCommand
 	static void DispatchGameThread(
-		FBaseGPUFrustumCullingParams& Params,
+		FGPUFrustumCullingParams& Params,
 		TFunction<void()> AsyncCallback);
 
 	// Dispatches this shader. Can be called from any thread
 	static void Dispatch(
-		FBaseGPUFrustumCullingParams& Params,
+		FGPUFrustumCullingParams& Params,
 		TFunction<void()> AsyncCallback);
 };

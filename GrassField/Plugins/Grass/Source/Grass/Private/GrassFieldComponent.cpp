@@ -10,7 +10,7 @@ UGrassFieldComponent::UGrassFieldComponent()
 }
 void UGrassFieldComponent::Test()
 {
-	FBaseGPUFrustumCullingParams* Params = new FBaseGPUFrustumCullingParams();
+	FGPUFrustumCullingParams* Params = new FGPUFrustumCullingParams();
 	FDispatchGrassGPUFrustumCulling::Dispatch(*Params, [this]() {});
 
 }

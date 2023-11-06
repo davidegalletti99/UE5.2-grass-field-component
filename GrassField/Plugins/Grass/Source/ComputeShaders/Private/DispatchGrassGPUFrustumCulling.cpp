@@ -9,7 +9,7 @@ DECLARE_CYCLE_STAT(TEXT("GrassGPUFrustumCulling Execute"), STAT_GrassGPUFrustumC
 
 void FDispatchGrassGPUFrustumCulling::DispatchRenderThread(
 	FRHICommandListImmediate& RHICmdList,
-	FBaseGPUFrustumCullingParams& Params,
+	FGPUFrustumCullingParams& Params,
 	TFunction<void()> AsyncCallback)
 {
 
@@ -37,9 +37,72 @@ void FDispatchGrassGPUFrustumCulling::DispatchRenderThread(
 							&& ScanGroupSumsComputeShader.IsValid() 
 							&& CompactComputeShader.IsValid();
 
-		if (bIsShaderValid) 
+		if (Params.GrassDataBuffer.Num() > 0 && bIsShaderValid)
 		{
-			FVoteShader::FParameters* VotePassParameters = 
+
+			// Groups calculation
+			int GrassDataNum = Params.GrassDataBuffer.Num();
+			int numThreadGroups = FMath::CeilToInt(GrassDataNum / 128.0f);
+			if (numThreadGroups > 128) {
+				int powerOfTwo = 128;
+				while (powerOfTwo < numThreadGroups)
+					powerOfTwo *= 2;
+
+				numThreadGroups = powerOfTwo;
+			}
+			else {
+				while (128 % numThreadGroups != 0)
+					numThreadGroups++;
+			}
+
+			int numVoteThreadGroups = FMath::CeilToInt(GrassDataNum / 128.0f);
+			int numGroupScanThreadGroups = FMath::CeilToInt(GrassDataNum / 1024.0f);
+
+			FIntVector VoteGroupCount = FIntVector(numVoteThreadGroups, 1, 1);
+			FIntVector ScanGroupCount = FIntVector(numThreadGroups, 1, 1);
+			FIntVector ScanGroupSumsGroupCount = FIntVector(numGroupScanThreadGroups, 1, 1);
+			FIntVector CompactGroupCount = FIntVector(numThreadGroups, 1, 1);
+
+			// SRV creation
+			const void* RawGrassData = (void*)Params.GrassDataBuffer.GetData();
+			int GrassDataSize = sizeof(FVector4f);
+
+
+			FRDGBufferRef GrassDataBuffer =
+				CreateUploadBuffer(GraphBuilder, TEXT("GrassDataBuffer"), GrassDataSize, GrassDataNum,
+					RawGrassData, GrassDataSize * GrassDataNum);
+
+			FRDGBufferSRVRef SRVGrassDataBuffer = GraphBuilder.CreateSRV(
+				FRDGBufferSRVDesc(GrassDataBuffer, EPixelFormat::PF_A32B32G32R32F));
+
+			// UAV creation
+			FRDGBufferRef VoteBuffer = GraphBuilder.CreateBuffer(
+				FRDGBufferDesc::CreateBufferDesc(
+					sizeof(uint32), GrassDataNum), TEXT("VoteBuffer"));
+			FRDGBufferUAVRef UAVVoteBuffer = GraphBuilder.CreateUAV(
+				FRDGBufferUAVDesc(VoteBuffer, EPixelFormat::PF_R32_UINT));
+
+			FRDGBufferRef ScanBuffer = GraphBuilder.CreateBuffer(
+				FRDGBufferDesc::CreateBufferDesc(
+					sizeof(uint32), GrassDataNum), TEXT("ScanBuffer"));
+			FRDGBufferUAVRef UAVScanBuffer = GraphBuilder.CreateUAV(
+				FRDGBufferUAVDesc(ScanBuffer, EPixelFormat::PF_R32_UINT));
+
+			FRDGBufferRef GroupSumArrayBuffer = GraphBuilder.CreateBuffer(
+				FRDGBufferDesc::CreateBufferDesc(
+					sizeof(uint32), numThreadGroups), TEXT("GroupSumArrayBuffer"));
+			FRDGBufferUAVRef UAVGroupSumArrayBuffer = GraphBuilder.CreateUAV(
+				FRDGBufferUAVDesc(GroupSumArrayBuffer, EPixelFormat::PF_R32_UINT));
+
+			FRDGBufferRef ScannedGroupSumBuffer = GraphBuilder.CreateBuffer(
+				FRDGBufferDesc::CreateBufferDesc(
+					sizeof(uint32), numThreadGroups), TEXT("ScannedGroupSumBuffer"));
+			FRDGBufferUAVRef UAVScannedGroupSumBuffer = GraphBuilder.CreateUAV(
+				FRDGBufferUAVDesc(ScannedGroupSumBuffer, EPixelFormat::PF_R32_UINT));
+
+
+			// Parameters setup
+			FVoteShader::FParameters* VotePassParameters =
 				GraphBuilder.AllocParameters<FVoteShader::FParameters>();
 
 			FScanShader::FParameters* ScanPassParameters =
@@ -51,11 +114,14 @@ void FDispatchGrassGPUFrustumCulling::DispatchRenderThread(
 			FCompactShader::FParameters* CompactPassParameters =
 				GraphBuilder.AllocParameters<FCompactShader::FParameters>();
 
-			FIntVector VoteGroupCount = FIntVector(1, 1, 1);
-			FIntVector ScanGroupCount = FIntVector(1, 1, 1);
-			FIntVector ScanGroupSumsGroupCount = FIntVector(1, 1, 1);
-			FIntVector CompactGroupCount = FIntVector(1, 1, 1);
+			VotePassParameters->MATRIX_VP = Params.VP;
+			VotePassParameters->_CameraPosition = Params.CameraPosition;
+			VotePassParameters->_Distance = Params.Distance;
+			VotePassParameters->_GrassDataBuffer = SRVGrassDataBuffer;
+			VotePassParameters->_VoteBuffer = UAVVoteBuffer;
 
+			// ...
+			
 			//
 			// Adding Render Passes
 			//
@@ -114,7 +180,7 @@ void FDispatchGrassGPUFrustumCulling::DispatchRenderThread(
 }
 
 void FDispatchGrassGPUFrustumCulling::DispatchGameThread(
-	FBaseGPUFrustumCullingParams& Params,
+	FGPUFrustumCullingParams& Params,
 	TFunction<void()> AsyncCallback)
 {
 	ENQUEUE_RENDER_COMMAND(SceneDrawCompletion)(
@@ -125,7 +191,7 @@ void FDispatchGrassGPUFrustumCulling::DispatchGameThread(
 }
 
 void FDispatchGrassGPUFrustumCulling::Dispatch(
-	FBaseGPUFrustumCullingParams& Params,
+	FGPUFrustumCullingParams& Params,
 	TFunction<void()> AsyncCallback)
 {
 	if (IsInRenderingThread())
