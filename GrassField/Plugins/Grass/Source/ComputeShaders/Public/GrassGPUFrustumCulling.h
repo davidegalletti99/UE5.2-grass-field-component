@@ -27,6 +27,12 @@
 #define NUM_THREADS_CompactShader_Y 1
 #define NUM_THREADS_CompactShader_Z 1
 
+struct COMPUTESHADERS_API FGrassData
+{
+	FVector4f Position;
+	FVector2f uv;
+	float displacement;
+};
 
 struct COMPUTESHADERS_API FGPUFrustumCullingParams
 {
@@ -68,7 +74,7 @@ public:
 		SHADER_PARAMETER(FMatrix44f, MATRIX_VP)
 		SHADER_PARAMETER(FVector4f, _CameraPosition)
 		SHADER_PARAMETER(float, _Distance) // cutoff distance
-		SHADER_PARAMETER_RDG_BUFFER_SRV(TArray<FVector4f>, _GrassDataBuffer)
+		SHADER_PARAMETER_RDG_BUFFER_SRV(Buffer<FVector4f>, _GrassDataBuffer)
 		SHADER_PARAMETER_RDG_BUFFER_UAV(RWBuffer<uint32>, _VoteBuffer)
 	END_SHADER_PARAMETER_STRUCT()
 
@@ -150,9 +156,10 @@ public:
 	using FPermutationDomain = TShaderPermutationDomain<>;
 
 	BEGIN_SHADER_PARAMETER_STRUCT(FGPUFrustumCullingParams, COMPUTESHADERS_API)
-		SHADER_PARAMETER_RDG_BUFFER_SRV(TArray<FVector4f>, _GrassDataBuffer)
+		SHADER_PARAMETER_RDG_BUFFER_SRV(Buffer<FVector4f>, _GrassDataBuffer)
 		SHADER_PARAMETER_RDG_BUFFER_UAV(RWBuffer<uint32>, _VoteBuffer)
 		SHADER_PARAMETER_RDG_BUFFER_UAV(RWBuffer<uint32>, _ScanBuffer)
+		SHADER_PARAMETER_RDG_BUFFER_UAV(RWBuffer<uint32>, _ArgsBuffer)
 		SHADER_PARAMETER_RDG_BUFFER_UAV(RWBuffer<uint32>, _GroupSumArray)
 		SHADER_PARAMETER_RDG_BUFFER_UAV(RWBuffer<FVector4f>, _CulledGrassOutputBuffer)
 		END_SHADER_PARAMETER_STRUCT()

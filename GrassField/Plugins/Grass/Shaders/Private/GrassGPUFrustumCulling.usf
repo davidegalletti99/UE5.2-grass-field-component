@@ -5,6 +5,7 @@
 Buffer<float4> _GrassDataBuffer;
 RWBuffer<uint> _VoteBuffer;
 RWBuffer<uint> _ScanBuffer;
+RWBuffer<uint> _ArgsBuffer;
 RWBuffer<uint> _GroupSumArray;
 RWBuffer<uint> _GroupSumArrayIn;
 RWBuffer<uint> _GroupSumArrayOut;

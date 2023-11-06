@@ -64,42 +64,66 @@ void FDispatchGrassGPUFrustumCulling::DispatchRenderThread(
 			FIntVector CompactGroupCount = FIntVector(numThreadGroups, 1, 1);
 
 			// SRV creation
+
+
+			// GrassDataBuffer
 			const void* RawGrassData = (void*)Params.GrassDataBuffer.GetData();
 			int GrassDataSize = sizeof(FVector4f);
-
-
 			FRDGBufferRef GrassDataBuffer =
 				CreateUploadBuffer(GraphBuilder, TEXT("GrassDataBuffer"), GrassDataSize, GrassDataNum,
 					RawGrassData, GrassDataSize * GrassDataNum);
-
 			FRDGBufferSRVRef SRVGrassDataBuffer = GraphBuilder.CreateSRV(
 				FRDGBufferSRVDesc(GrassDataBuffer, EPixelFormat::PF_A32B32G32R32F));
 
+			//FRDGBufferDesc GrassDataBufferDesc = FRDGBufferDesc::CreateStructuredDesc(GrassDataSize, GrassDataNum);
+			//FRDGBufferRef GrassDataBuffer = GraphBuilder.CreateBuffer(GrassDataBufferDesc, TEXT("CustomBuffer"));
+			//GraphBuilder.QueueBufferUpload(GrassDataBuffer, RawGrassData, GrassDataNum);
+
+			//FRDGBufferSRVRef SRVGrassDataBuffer = GraphBuilder.CreateSRV(GrassDataBuffer);
+
 			// UAV creation
+
+			// ArgsBuffer 
+			FRDGBufferRef ArgsBuffer = GraphBuilder.CreateBuffer(
+				FRDGBufferDesc::CreateBufferDesc(
+					sizeof(uint32), 5), TEXT("ArgsBuffer"));
+			FRDGBufferUAVRef UAVArgsBuffer = GraphBuilder.CreateUAV(
+				FRDGBufferUAVDesc(ArgsBuffer, EPixelFormat::PF_R32_UINT));
+
+			// VoteBuffer
 			FRDGBufferRef VoteBuffer = GraphBuilder.CreateBuffer(
 				FRDGBufferDesc::CreateBufferDesc(
 					sizeof(uint32), GrassDataNum), TEXT("VoteBuffer"));
 			FRDGBufferUAVRef UAVVoteBuffer = GraphBuilder.CreateUAV(
 				FRDGBufferUAVDesc(VoteBuffer, EPixelFormat::PF_R32_UINT));
 
+			// ScanBuffer
 			FRDGBufferRef ScanBuffer = GraphBuilder.CreateBuffer(
 				FRDGBufferDesc::CreateBufferDesc(
 					sizeof(uint32), GrassDataNum), TEXT("ScanBuffer"));
 			FRDGBufferUAVRef UAVScanBuffer = GraphBuilder.CreateUAV(
 				FRDGBufferUAVDesc(ScanBuffer, EPixelFormat::PF_R32_UINT));
 
+			// GroupSumArrayBuffer
 			FRDGBufferRef GroupSumArrayBuffer = GraphBuilder.CreateBuffer(
 				FRDGBufferDesc::CreateBufferDesc(
 					sizeof(uint32), numThreadGroups), TEXT("GroupSumArrayBuffer"));
 			FRDGBufferUAVRef UAVGroupSumArrayBuffer = GraphBuilder.CreateUAV(
 				FRDGBufferUAVDesc(GroupSumArrayBuffer, EPixelFormat::PF_R32_UINT));
 
+			// ScannedGroupSumBuffer
 			FRDGBufferRef ScannedGroupSumBuffer = GraphBuilder.CreateBuffer(
 				FRDGBufferDesc::CreateBufferDesc(
 					sizeof(uint32), numThreadGroups), TEXT("ScannedGroupSumBuffer"));
 			FRDGBufferUAVRef UAVScannedGroupSumBuffer = GraphBuilder.CreateUAV(
 				FRDGBufferUAVDesc(ScannedGroupSumBuffer, EPixelFormat::PF_R32_UINT));
 
+			// CulledGrassDataBuffer
+			FRDGBufferRef CulledGrassDataBuffer = GraphBuilder.CreateBuffer(
+				FRDGBufferDesc::CreateBufferDesc(
+					sizeof(FVector4f), GrassDataNum), TEXT("CulledGrassDataBuffer"));
+			FRDGBufferUAVRef UAVCulledGrassDataBuffer = GraphBuilder.CreateUAV(
+				FRDGBufferUAVDesc(CulledGrassDataBuffer, EPixelFormat::PF_A32B32G32R32F));
 
 			// Parameters setup
 			FVoteShader::FParameters* VotePassParameters =
@@ -120,8 +144,21 @@ void FDispatchGrassGPUFrustumCulling::DispatchRenderThread(
 			VotePassParameters->_GrassDataBuffer = SRVGrassDataBuffer;
 			VotePassParameters->_VoteBuffer = UAVVoteBuffer;
 
-			// ...
-			
+			ScanPassParameters->_VoteBuffer = UAVVoteBuffer;
+			ScanPassParameters->_ScanBuffer = UAVScanBuffer;
+			ScanPassParameters->_GroupSumArray = UAVGroupSumArrayBuffer;
+
+			ScanGroupSumsPassParameters->_NumOfGroups = numThreadGroups;
+			ScanGroupSumsPassParameters->_GroupSumArrayIn = UAVGroupSumArrayBuffer;
+			ScanGroupSumsPassParameters->_GroupSumArrayOut = UAVScannedGroupSumBuffer;
+
+			CompactPassParameters->_GrassDataBuffer = SRVGrassDataBuffer;
+			CompactPassParameters->_ArgsBuffer = UAVArgsBuffer;
+			CompactPassParameters->_VoteBuffer = UAVVoteBuffer;
+			CompactPassParameters->_ScanBuffer = UAVScanBuffer;
+			CompactPassParameters->_GroupSumArray = UAVScannedGroupSumBuffer;
+			CompactPassParameters->_CulledGrassOutputBuffer = UAVCulledGrassDataBuffer;
+
 			//
 			// Adding Render Passes
 			//
