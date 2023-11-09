@@ -23,15 +23,15 @@ public:
 	static void DispatchRenderThread(
 		FRHICommandListImmediate& RHICmdList,
 		FGPUFrustumCullingParams& Params,
-		TFunction<void()> AsyncCallback);
+		TFunction<void(TArray<FGrassData>& grassData)> AsyncCallback);
 
 	// Executes this shader on the render thread from the game thread via EnqueueRenderThreadCommand
 	static void DispatchGameThread(
 		FGPUFrustumCullingParams& Params,
-		TFunction<void()> AsyncCallback);
+		TFunction<void(TArray<FGrassData>& grassData)> AsyncCallback);
 
 	// Dispatches this shader. Can be called from any thread
 	static void Dispatch(
 		FGPUFrustumCullingParams& Params,
-		TFunction<void()> AsyncCallback);
+		TFunction<void(TArray<FGrassData>& grassData)> AsyncCallback);
 };

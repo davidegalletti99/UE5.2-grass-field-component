@@ -10,7 +10,7 @@ DECLARE_CYCLE_STAT(TEXT("GrassGPUFrustumCulling Execute"), STAT_GrassGPUFrustumC
 void FDispatchGrassGPUFrustumCulling::DispatchRenderThread(
 	FRHICommandListImmediate& RHICmdList,
 	FGPUFrustumCullingParams& Params,
-	TFunction<void()> AsyncCallback)
+	TFunction<void(TArray<FGrassData>& grassData)> AsyncCallback)
 {
 
 	FRDGBuilder GraphBuilder(RHICmdList);
@@ -64,66 +64,55 @@ void FDispatchGrassGPUFrustumCulling::DispatchRenderThread(
 			FIntVector CompactGroupCount = FIntVector(numThreadGroups, 1, 1);
 
 			// SRV creation
-
-
 			// GrassDataBuffer
 			const void* RawGrassData = (void*)Params.GrassDataBuffer.GetData();
-			int GrassDataSize = sizeof(FVector4f);
-			FRDGBufferRef GrassDataBuffer =
-				CreateUploadBuffer(GraphBuilder, TEXT("GrassDataBuffer"), GrassDataSize, GrassDataNum,
-					RawGrassData, GrassDataSize * GrassDataNum);
+			FRDGBufferRef GrassDataBuffer = CreateStructuredBuffer(
+				GraphBuilder,
+				TEXT("GrassDataBuffer"),
+				sizeof(FGrassData), GrassDataNum,
+				RawGrassData, sizeof(FGrassData) * GrassDataNum);
 			FRDGBufferSRVRef SRVGrassDataBuffer = GraphBuilder.CreateSRV(
 				FRDGBufferSRVDesc(GrassDataBuffer, EPixelFormat::PF_A32B32G32R32F));
 
-			//FRDGBufferDesc GrassDataBufferDesc = FRDGBufferDesc::CreateStructuredDesc(GrassDataSize, GrassDataNum);
-			//FRDGBufferRef GrassDataBuffer = GraphBuilder.CreateBuffer(GrassDataBufferDesc, TEXT("CustomBuffer"));
-			//GraphBuilder.QueueBufferUpload(GrassDataBuffer, RawGrassData, GrassDataNum);
-
-			//FRDGBufferSRVRef SRVGrassDataBuffer = GraphBuilder.CreateSRV(GrassDataBuffer);
-
 			// UAV creation
-
 			// ArgsBuffer 
 			FRDGBufferRef ArgsBuffer = GraphBuilder.CreateBuffer(
-				FRDGBufferDesc::CreateBufferDesc(
-					sizeof(uint32), 5), TEXT("ArgsBuffer"));
-			FRDGBufferUAVRef UAVArgsBuffer = GraphBuilder.CreateUAV(
-				FRDGBufferUAVDesc(ArgsBuffer, EPixelFormat::PF_R32_UINT));
+				FRDGBufferDesc::CreateStructuredDesc(sizeof(uint32), 5),
+				TEXT("ArgsBuffer"));
+			FRDGBufferUAVRef UAVArgsBuffer = GraphBuilder.CreateUAV(ArgsBuffer);
 
 			// VoteBuffer
 			FRDGBufferRef VoteBuffer = GraphBuilder.CreateBuffer(
-				FRDGBufferDesc::CreateBufferDesc(
-					sizeof(uint32), GrassDataNum), TEXT("VoteBuffer"));
-			FRDGBufferUAVRef UAVVoteBuffer = GraphBuilder.CreateUAV(
-				FRDGBufferUAVDesc(VoteBuffer, EPixelFormat::PF_R32_UINT));
+				FRDGBufferDesc::CreateStructuredDesc(sizeof(uint32), GrassDataNum),
+				TEXT("VoteBuffer"));
+			FRDGBufferUAVRef UAVVoteBuffer = GraphBuilder.CreateUAV(VoteBuffer);
+
 
 			// ScanBuffer
 			FRDGBufferRef ScanBuffer = GraphBuilder.CreateBuffer(
-				FRDGBufferDesc::CreateBufferDesc(
-					sizeof(uint32), GrassDataNum), TEXT("ScanBuffer"));
-			FRDGBufferUAVRef UAVScanBuffer = GraphBuilder.CreateUAV(
-				FRDGBufferUAVDesc(ScanBuffer, EPixelFormat::PF_R32_UINT));
+				FRDGBufferDesc::CreateStructuredDesc(sizeof(uint32), GrassDataNum),
+				TEXT("ScanBuffer"));
+			FRDGBufferUAVRef UAVScanBuffer = GraphBuilder.CreateUAV(ScanBuffer);
+
 
 			// GroupSumArrayBuffer
 			FRDGBufferRef GroupSumArrayBuffer = GraphBuilder.CreateBuffer(
-				FRDGBufferDesc::CreateBufferDesc(
-					sizeof(uint32), numThreadGroups), TEXT("GroupSumArrayBuffer"));
-			FRDGBufferUAVRef UAVGroupSumArrayBuffer = GraphBuilder.CreateUAV(
-				FRDGBufferUAVDesc(GroupSumArrayBuffer, EPixelFormat::PF_R32_UINT));
+				FRDGBufferDesc::CreateStructuredDesc(sizeof(uint32), numThreadGroups),
+				TEXT("GroupSumArrayBuffer"));
+			FRDGBufferUAVRef UAVGroupSumArrayBuffer = GraphBuilder.CreateUAV(GroupSumArrayBuffer);
+
 
 			// ScannedGroupSumBuffer
 			FRDGBufferRef ScannedGroupSumBuffer = GraphBuilder.CreateBuffer(
-				FRDGBufferDesc::CreateBufferDesc(
-					sizeof(uint32), numThreadGroups), TEXT("ScannedGroupSumBuffer"));
-			FRDGBufferUAVRef UAVScannedGroupSumBuffer = GraphBuilder.CreateUAV(
-				FRDGBufferUAVDesc(ScannedGroupSumBuffer, EPixelFormat::PF_R32_UINT));
+				FRDGBufferDesc::CreateStructuredDesc(sizeof(uint32), numThreadGroups),
+				TEXT("ScannedGroupSumBuffer"));
+			FRDGBufferUAVRef UAVScannedGroupSumBuffer = GraphBuilder.CreateUAV(ScannedGroupSumBuffer);
 
 			// CulledGrassDataBuffer
 			FRDGBufferRef CulledGrassDataBuffer = GraphBuilder.CreateBuffer(
-				FRDGBufferDesc::CreateBufferDesc(
-					sizeof(FVector4f), GrassDataNum), TEXT("CulledGrassDataBuffer"));
-			FRDGBufferUAVRef UAVCulledGrassDataBuffer = GraphBuilder.CreateUAV(
-				FRDGBufferUAVDesc(CulledGrassDataBuffer, EPixelFormat::PF_A32B32G32R32F));
+				FRDGBufferDesc::CreateStructuredDesc(sizeof(FGrassData), GrassDataNum),
+				TEXT("CulledGrassDataBuffer"));
+			FRDGBufferUAVRef UAVCulledGrassDataBuffer = GraphBuilder.CreateUAV(CulledGrassDataBuffer);
 
 			// Parameters setup
 			FVoteShader::FParameters* VotePassParameters =
@@ -139,72 +128,111 @@ void FDispatchGrassGPUFrustumCulling::DispatchRenderThread(
 				GraphBuilder.AllocParameters<FCompactShader::FParameters>();
 
 			VotePassParameters->MATRIX_VP = Params.VP;
-			VotePassParameters->_CameraPosition = Params.CameraPosition;
-			VotePassParameters->_Distance = Params.Distance;
-			VotePassParameters->_GrassDataBuffer = SRVGrassDataBuffer;
-			VotePassParameters->_VoteBuffer = UAVVoteBuffer;
+			VotePassParameters->CameraPosition = Params.CameraPosition;
+			VotePassParameters->Distance = Params.Distance;
+			VotePassParameters->GrassDataBuffer = SRVGrassDataBuffer;
+			VotePassParameters->VoteBuffer = UAVVoteBuffer;
 
-			ScanPassParameters->_VoteBuffer = UAVVoteBuffer;
-			ScanPassParameters->_ScanBuffer = UAVScanBuffer;
-			ScanPassParameters->_GroupSumArray = UAVGroupSumArrayBuffer;
+			ScanPassParameters->VoteBuffer = UAVVoteBuffer;
+			ScanPassParameters->ScanBuffer = UAVScanBuffer;
+			ScanPassParameters->GroupSumArray = UAVGroupSumArrayBuffer;
 
-			ScanGroupSumsPassParameters->_NumOfGroups = numThreadGroups;
-			ScanGroupSumsPassParameters->_GroupSumArrayIn = UAVGroupSumArrayBuffer;
-			ScanGroupSumsPassParameters->_GroupSumArrayOut = UAVScannedGroupSumBuffer;
+			ScanGroupSumsPassParameters->NumOfGroups = numThreadGroups;
+			ScanGroupSumsPassParameters->GroupSumArrayIn = UAVGroupSumArrayBuffer;
+			ScanGroupSumsPassParameters->GroupSumArrayOut = UAVScannedGroupSumBuffer;
 
-			CompactPassParameters->_GrassDataBuffer = SRVGrassDataBuffer;
-			CompactPassParameters->_ArgsBuffer = UAVArgsBuffer;
-			CompactPassParameters->_VoteBuffer = UAVVoteBuffer;
-			CompactPassParameters->_ScanBuffer = UAVScanBuffer;
-			CompactPassParameters->_GroupSumArray = UAVScannedGroupSumBuffer;
-			CompactPassParameters->_CulledGrassOutputBuffer = UAVCulledGrassDataBuffer;
+			CompactPassParameters->GrassDataBuffer = SRVGrassDataBuffer;
+			CompactPassParameters->ArgsBuffer = UAVArgsBuffer;
+			CompactPassParameters->VoteBuffer = UAVVoteBuffer;
+			CompactPassParameters->ScanBuffer = UAVScanBuffer;
+			CompactPassParameters->GroupSumArray = UAVScannedGroupSumBuffer;
+			CompactPassParameters->CulledGrassOutputBuffer = UAVCulledGrassDataBuffer;
 
 			//
 			// Adding Render Passes
 			//
-			GraphBuilder.AddPass(
+			
+			// https://www.reddit.com/r/unrealengine/comments/tqxmeq/how_to_add_dependency_between_compute_shaders_in/
+			FComputeShaderUtils::AddPass(
+				GraphBuilder,
 				RDG_EVENT_NAME("ExecuteVoteShader"),
+				VoteComputeShader,
 				VotePassParameters,
-				ERDGPassFlags::Compute,
-				[&VotePassParameters, VoteComputeShader, VoteGroupCount](FRHIComputeCommandList& RHICmdList)
-				{
-					FComputeShaderUtils::Dispatch(
-						RHICmdList, VoteComputeShader, *VotePassParameters, VoteGroupCount);
-				}
+				VoteGroupCount
 			);
 
-			GraphBuilder.AddPass(
+			FComputeShaderUtils::AddPass(
+				GraphBuilder,
 				RDG_EVENT_NAME("ExecuteScanShader"),
+				ScanComputeShader,
 				ScanPassParameters,
-				ERDGPassFlags::Compute,
-				[&ScanPassParameters, ScanComputeShader, ScanGroupCount](FRHIComputeCommandList& RHICmdList)
-				{
-					FComputeShaderUtils::Dispatch(
-						RHICmdList, ScanComputeShader, *ScanPassParameters, ScanGroupCount);
-				}
+				ScanGroupCount
 			);
 
-			GraphBuilder.AddPass(
+			FComputeShaderUtils::AddPass(
+				GraphBuilder,
 				RDG_EVENT_NAME("ExecuteScanGroupSumsShader"),
+				ScanGroupSumsComputeShader,
 				ScanGroupSumsPassParameters,
-				ERDGPassFlags::Compute,
-				[&ScanGroupSumsPassParameters, ScanGroupSumsComputeShader, ScanGroupSumsGroupCount](FRHIComputeCommandList& RHICmdList)
-				{
-					FComputeShaderUtils::Dispatch(
-						RHICmdList, ScanGroupSumsComputeShader, *ScanGroupSumsPassParameters, ScanGroupSumsGroupCount);
-				}
+				ScanGroupSumsGroupCount
 			);
 
-			GraphBuilder.AddPass(
+			FComputeShaderUtils::AddPass(
+				GraphBuilder,
 				RDG_EVENT_NAME("ExecuteCompactShader"),
+				CompactComputeShader,
 				CompactPassParameters,
-				ERDGPassFlags::Compute,
-				[&CompactPassParameters, CompactComputeShader, CompactGroupCount](FRHIComputeCommandList& RHICmdList)
-				{
-					FComputeShaderUtils::Dispatch(
-						RHICmdList, CompactComputeShader, *CompactPassParameters, CompactGroupCount);
-				}
+				CompactGroupCount
 			);
+
+			int32 grassBytes = sizeof(FGrassData) * GrassDataNum;
+			int32 argsBytes = sizeof(uint32) * 5;
+
+			FRHIGPUBufferReadback* GPUCulledGrassDataReadback = new FRHIGPUBufferReadback(TEXT("ExecuteCulledGrassData"));
+			FRHIGPUBufferReadback* GPUArgsReadback = new FRHIGPUBufferReadback(TEXT("ExecuteArgs"));
+
+			AddEnqueueCopyPass(GraphBuilder, GPUCulledGrassDataReadback, CulledGrassDataBuffer, grassBytes);
+			AddEnqueueCopyPass(GraphBuilder, GPUArgsReadback, ArgsBuffer, argsBytes);
+
+			UE_LOG(LogTemp, Warning, TEXT("GrassData.Num() = %d"), GrassDataNum);
+			auto RunnerFunc = [GPUCulledGrassDataReadback,
+				GPUArgsReadback, AsyncCallback]
+				(auto&& RunnerFunc) -> void
+			{
+				if (GPUCulledGrassDataReadback->IsReady() && GPUArgsReadback->IsReady())
+				{
+
+					uint32* args = (uint32*) GPUArgsReadback->Lock(GPUArgsReadback->GetGPUSizeBytes());
+					GPUArgsReadback->Unlock();
+					UE_LOG(LogTemp, Warning, TEXT("args[1] = %d"), args[1]);
+
+					FGrassData* grassDataArr = (FGrassData*)GPUCulledGrassDataReadback->Lock(GPUCulledGrassDataReadback->GetGPUSizeBytes());
+					GPUCulledGrassDataReadback->Unlock();
+
+					TArray<FGrassData>* GrassData = new TArray<FGrassData>(grassDataArr, args[1]);
+
+					AsyncTask(ENamedThreads::GameThread, [GrassData, AsyncCallback]()
+						{
+							AsyncCallback(*GrassData);
+						});
+
+					delete GPUCulledGrassDataReadback;
+					delete GPUArgsReadback;
+				}
+				else
+				{
+					AsyncTask(ENamedThreads::ActualRenderingThread, [RunnerFunc]()
+						{
+							RunnerFunc(RunnerFunc);
+						});
+				}
+			};
+
+
+			AsyncTask(ENamedThreads::ActualRenderingThread, [RunnerFunc]()
+				{
+					RunnerFunc(RunnerFunc);
+				});
 
 		}
 		else
@@ -218,7 +246,7 @@ void FDispatchGrassGPUFrustumCulling::DispatchRenderThread(
 
 void FDispatchGrassGPUFrustumCulling::DispatchGameThread(
 	FGPUFrustumCullingParams& Params,
-	TFunction<void()> AsyncCallback)
+	TFunction<void(TArray<FGrassData>& grassData)> AsyncCallback)
 {
 	ENQUEUE_RENDER_COMMAND(SceneDrawCompletion)(
 		[&Params, AsyncCallback](FRHICommandListImmediate& RHICmdList)
@@ -229,7 +257,7 @@ void FDispatchGrassGPUFrustumCulling::DispatchGameThread(
 
 void FDispatchGrassGPUFrustumCulling::Dispatch(
 	FGPUFrustumCullingParams& Params,
-	TFunction<void()> AsyncCallback)
+	TFunction<void(TArray<FGrassData>& grassData)> AsyncCallback)
 {
 	if (IsInRenderingThread())
 	{

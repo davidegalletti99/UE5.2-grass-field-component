@@ -72,7 +72,7 @@ void FGrassShaderInterface::DispatchRenderThread(
 
 		bool bIsShaderValid = ComputeShader.IsValid();
 
-		if (bIsShaderValid) {
+		if (Params.Points.Num() > 0 && bIsShaderValid) {
 
 			FGrassShader::FParameters* PassParameters = GraphBuilder.AllocParameters<FGrassShader::FParameters>();
 
