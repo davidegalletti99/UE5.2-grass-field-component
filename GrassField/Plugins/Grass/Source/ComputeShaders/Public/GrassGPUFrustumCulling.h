@@ -14,14 +14,6 @@
 
 #include "ComputeShaders.h"
 
-struct COMPUTESHADERS_API FGPUFrustumCullingParams
-{
-	FMatrix44f VP;
-	FVector4f CameraPosition;
-	float Distance; // Cutoff distance
-	TArray<FGrassData> GrassDataBuffer;
-};
-
 /**
  * Compute Shader that compute the vote phase for the GPU frustum culling algo.
  */
@@ -33,15 +25,13 @@ class COMPUTESHADERS_API FVoteShader : public FGlobalShader
 public:
 	using FPermutationDomain = TShaderPermutationDomain<>;
 	
-	BEGIN_SHADER_PARAMETER_STRUCT(FGPUFrustumCullingParams, COMPUTESHADERS_API)
+	BEGIN_SHADER_PARAMETER_STRUCT(FParameters, COMPUTESHADERS_API)
 		SHADER_PARAMETER(FMatrix44f, MATRIX_VP)
 		SHADER_PARAMETER(FVector4f, CameraPosition)
 		SHADER_PARAMETER(float, Distance) // cutoff distance
 		SHADER_PARAMETER_RDG_BUFFER_SRV(StructuredBuffer<FGrassData>, GrassDataBuffer)
 		SHADER_PARAMETER_RDG_BUFFER_UAV(RWStructuredBuffer<uint32>, VoteBuffer)
 	END_SHADER_PARAMETER_STRUCT()
-
-	using FParameters = FGPUFrustumCullingParams;
 
 	static bool ShouldCompilePermutation(
 		const FGlobalShaderPermutationParameters& Parameters);
@@ -62,13 +52,11 @@ class COMPUTESHADERS_API FScanShader : public FGlobalShader
 public:
 	using FPermutationDomain = TShaderPermutationDomain<>;
 
-	BEGIN_SHADER_PARAMETER_STRUCT(FGPUFrustumCullingParams, COMPUTESHADERS_API)
+	BEGIN_SHADER_PARAMETER_STRUCT(FParameters, COMPUTESHADERS_API)
 		SHADER_PARAMETER_RDG_BUFFER_UAV(RWBuffer<uint32>, VoteBuffer)
 		SHADER_PARAMETER_RDG_BUFFER_UAV(RWBuffer<uint32>, ScanBuffer)
 		SHADER_PARAMETER_RDG_BUFFER_UAV(RWBuffer<uint32>, GroupSumArray)
 	END_SHADER_PARAMETER_STRUCT()
-
-	using FParameters = FGPUFrustumCullingParams;
 
 	static bool ShouldCompilePermutation(
 		const FGlobalShaderPermutationParameters& Parameters);
@@ -90,13 +78,11 @@ class COMPUTESHADERS_API FScanGroupSumsShader : public FGlobalShader
 public:
 	using FPermutationDomain = TShaderPermutationDomain<>;
 
-	BEGIN_SHADER_PARAMETER_STRUCT(FGPUFrustumCullingParams, COMPUTESHADERS_API)
+	BEGIN_SHADER_PARAMETER_STRUCT(FParameters, COMPUTESHADERS_API)
 		SHADER_PARAMETER(int, NumOfGroups)
 		SHADER_PARAMETER_RDG_BUFFER_UAV(RWStructuredBuffer<uint32>, GroupSumArrayIn)
 		SHADER_PARAMETER_RDG_BUFFER_UAV(RWStructuredBuffer<uint32>, GroupSumArrayOut)
 	END_SHADER_PARAMETER_STRUCT()
-
-	using FParameters = FGPUFrustumCullingParams;
 
 	static bool ShouldCompilePermutation(
 		const FGlobalShaderPermutationParameters& Parameters);
@@ -118,7 +104,7 @@ class COMPUTESHADERS_API FCompactShader : public FGlobalShader
 public:
 	using FPermutationDomain = TShaderPermutationDomain<>;
 	
-	BEGIN_SHADER_PARAMETER_STRUCT(FGPUFrustumCullingParams, COMPUTESHADERS_API)
+	BEGIN_SHADER_PARAMETER_STRUCT(FParameters, COMPUTESHADERS_API)
 		SHADER_PARAMETER_RDG_BUFFER_UAV(RWStructuredBuffer<uint32>, ArgsBuffer)
 		SHADER_PARAMETER_RDG_BUFFER_SRV(StructuredBuffer<FGrassData>, GrassDataBuffer)
 		SHADER_PARAMETER_RDG_BUFFER_UAV(RWStructuredBuffer<uint32>, VoteBuffer)
@@ -126,8 +112,6 @@ public:
 		SHADER_PARAMETER_RDG_BUFFER_UAV(RWStructuredBuffer<uint32>, GroupSumArray)
 		SHADER_PARAMETER_RDG_BUFFER_UAV(RWStructuredBuffer<FGrassData>, CulledGrassOutputBuffer)
 	END_SHADER_PARAMETER_STRUCT()
-
-	using FParameters = FGPUFrustumCullingParams;
 
 	static bool ShouldCompilePermutation(
 		const FGlobalShaderPermutationParameters& Parameters);
@@ -149,11 +133,9 @@ class COMPUTESHADERS_API FResetArgsShader : public FGlobalShader
 public:
 	using FPermutationDomain = TShaderPermutationDomain<>;
 
-	BEGIN_SHADER_PARAMETER_STRUCT(FGPUFrustumCullingParams, COMPUTESHADERS_API)
+	BEGIN_SHADER_PARAMETER_STRUCT(FParameters, COMPUTESHADERS_API)
 		SHADER_PARAMETER_RDG_BUFFER_UAV(RWStructuredBuffer<uint32>, ArgsBuffer)
-		END_SHADER_PARAMETER_STRUCT()
-
-		using FParameters = FGPUFrustumCullingParams;
+	END_SHADER_PARAMETER_STRUCT()
 
 	static bool ShouldCompilePermutation(
 		const FGlobalShaderPermutationParameters& Parameters);

@@ -1,8 +1,7 @@
 #include "/Engine/Public/Platform.ush"
+#include "Noise.ush"
 
 float GlobalWorldTime;
-#include "Noise.usf"
-
 int Width;
 int Height;
 int MaxAltitude;

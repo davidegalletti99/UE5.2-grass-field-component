@@ -7,12 +7,6 @@
 #include "UniformBuffer.h"
 #include "GrassData.h"
 
-#include "RHI.h"
-#include "RHICommandList.h"
-#include "RHIStaticStates.h"
-
-#include "MeshPassProcessor.h"
-#include "MeshMaterialShader.h"
 
 #include "GlobalShader.h"
 #include "ShaderParameterUtils.h"
@@ -34,49 +28,6 @@
 #include "ComputeShaders/Public/ComputeShaders.h"
 #include "ProceduralMeshComponent.h"
 
-// deve valere che: X * Y * Z <= 1024
-#define NUM_THREADS_GrassShader_X 1024
-#define NUM_THREADS_GrassShader_Y 1
-#define NUM_THREADS_GrassShader_Z 1
-
-// --------------------------------------------------------------
-// ------------ Compute Shader Struct & Definitions -------------
-// --------------------------------------------------------------
-
-struct COMPUTESHADERS_API FGrassShaderDispatchParams
-{
-	int X;
-	int Y;
-	int Z;
-
-	float GlobalWorldTime;
-	float MinHeight;
-	float MaxHeight;
-	TArray<FGrassData> GrassDataBuffer;
-	FVector Position;
-	FVector CameraDirection;
-	float Lambda;
-
-
-	FGrassShaderDispatchParams(
-		float globalWorlTime, 
-		TArray<FGrassData> grassData,
-		float minHeight, 
-		float maxHeight, 
-		float lambda)
-		:	X((int)grassData.Num() / NUM_THREADS_GrassShader_X + (int)(grassData.Num() % NUM_THREADS_GrassShader_X > 0)),
-			Y(1), 
-			Z(1),
-		GlobalWorldTime(globalWorlTime),
-		MinHeight(minHeight),
-		MaxHeight(maxHeight),
-		Lambda(lambda),
-		GrassDataBuffer(grassData)
-
-	{
-	}
-};
-
 
 // --------------------------------------------------------------
 // ----------------- Compute Shader Declaration -----------------
@@ -90,21 +41,15 @@ public:
 	SHADER_USE_PARAMETER_STRUCT(FGrassShader, FGlobalShader);
 
 
-	class FGrassShader_Perm_TEST : SHADER_PERMUTATION_INT("TEST", 1);
-	using FPermutationDomain = TShaderPermutationDomain<FGrassShader_Perm_TEST>;
+	using FPermutationDomain = TShaderPermutationDomain<>;
 
-	BEGIN_SHADER_PARAMETER_STRUCT(FGrassShaderDispatchParams, COMPUTESHADERS_API)
-		SHADER_PARAMETER(int, Size)
-		SHADER_PARAMETER(float, GlobalWorldTime)
+	BEGIN_SHADER_PARAMETER_STRUCT(FParameters, COMPUTESHADERS_API)
 		SHADER_PARAMETER(float, Lambda)
-		SHADER_PARAMETER(float, MinHeight)
-		SHADER_PARAMETER(float, MaxHeight)
-		SHADER_PARAMETER_RDG_BUFFER_SRV(StructuredBuffer<FGrassData>, GrassDataBuffer)
+		SHADER_PARAMETER_RDG_BUFFER_UAV(RWStructuredBuffer<int32>, ArgsBuffer)
+		SHADER_PARAMETER_RDG_BUFFER_UAV(RWStructuredBuffer<FGrassData>, GrassDataBuffer)
 		SHADER_PARAMETER_RDG_BUFFER_UAV(RWStructuredBuffer<FVector3f>, GrassPoints)
 		SHADER_PARAMETER_RDG_BUFFER_UAV(RWStructuredBuffer<int32>, GrassTriangles)
 	END_SHADER_PARAMETER_STRUCT()
-
-	using FParameters = FGrassShaderDispatchParams;
 
 	static bool ShouldCompilePermutation(const FGlobalShaderPermutationParameters& Parameters);
 
@@ -112,57 +57,4 @@ public:
 		const FGlobalShaderPermutationParameters& Parameters,
 		FShaderCompilerEnvironment& OutEnvironment);
 private:
-};
-
-
-// --------------------------------------------------------------
-// ------------------ Compute Shader Interface ------------------
-// --------------------------------------------------------------
-
-// This is a public interface that we define so outside code can invoke our compute shader.
-class COMPUTESHADERS_API FGrassShaderInterface {
-public:
-	// Executes this shader on the render thread
-	static void DispatchRenderThread(
-		FRHICommandListImmediate& RHICmdList,
-		FGrassShaderDispatchParams& Params,
-		TFunction<void(TArray<FVector>& GrassPoints, TArray<int32>& GrassTriangles)> AsyncCallback);
-
-	// Executes this shader on the render thread from the game thread via EnqueueRenderThreadCommand
-	static void DispatchGameThread(
-		FGrassShaderDispatchParams& Params,
-		TFunction<void(TArray<FVector>& GrassPoints, TArray<int32>& GrassTriangles)> AsyncCallback);
-
-	// Dispatches this shader. Can be called from any thread
-	static void Dispatch(
-		FGrassShaderDispatchParams& Params,
-		TFunction<void(TArray<FVector>& GrassPoints, TArray<int32>& GrassTriangles)> AsyncCallback);
-};
-
-
-
-// --------------------------------------------------------------
-// ------------------- Compute Shader Library -------------------
-// --------------------------------------------------------------
-
-class COMPUTESHADERS_API GrassShaderExecutor : public FAsyncTaskBase
-{
-	void DoTaskWork();
-	bool TryAbandonTask();
-
-public:
-	int sectionId;
-	float globalWorldTime; 
-
-	UProceduralMeshComponent* meshComponent;
-
-	float lambda;
-	float minHeight;
-	float maxHeight;
-
-	TArray<FGrassData> points;
-
-	GrassShaderExecutor();
-private:
-
 };

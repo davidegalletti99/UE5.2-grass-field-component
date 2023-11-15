@@ -26,15 +26,13 @@ struct COMPUTESHADERS_API FGrassData
 	};
 
 	float3 position;
-	float2 uv;
-	float displacement;
+	float height;
 
-	FGrassData(FVector3f position, FVector2f uv, float displacement) :
+	FGrassData(FVector3f position, float height) :
 		position(float3(position.X, position.Y, position.Z)),
-		uv(float2(uv.X, uv.Y)),
-		displacement(displacement)
+		height(height)
 	{}
 
-	FGrassData() : FGrassData(FVector3f(), FVector2f(), 0.0f)
+	FGrassData() : FGrassData(FVector3f(), 10.0f)
 	{}
 };

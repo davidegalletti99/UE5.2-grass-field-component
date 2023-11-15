@@ -40,7 +40,7 @@ void Vote(
     
     bool inView =  clipspace.x >= 0.0f - margin && clipspace.x <= 1.0f + margin
                 && clipspace.y >= 0.0f - margin && clipspace.y <= 1.0f + margin
-                && clipspace.z >= 0.0f - margin && clipspace.z <= 1.0f + margin;
+                && clipspace.z >= 0.0f          && clipspace.z <= 1.0f;
     bool withinDistance = distance(CameraPosition.xyz, position.xyz) < Distance;
 
     VoteBuffer[DispatchThreadId.x] = inView * withinDistance;
@@ -184,5 +184,7 @@ void Compact(
 [numthreads(1, 1, 1)]
 void ResetArgs(uint3 id : SV_DISPATCHTHREADID)
 {
-    ArgsBuffer[1] = (uint) 0;
+    [unroll]
+    for (int i = 0; i < 5; i++)
+        ArgsBuffer[i] = (uint) 0;
 }

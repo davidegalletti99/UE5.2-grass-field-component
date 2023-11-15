@@ -15,13 +15,13 @@ GrassChunk::GrassChunk()
 GrassChunk::~GrassChunk() 
 {}
 
-bool GrassChunk::AddGrassData(FVector point, FVector2D uv)
+bool GrassChunk::AddGrassData(FVector point, float height)
 {
 	bool result = FMath::PointBoxIntersection(point, bounds);
 
 	if (result) 
 	{
-		FGrassData d = FGrassData(FVector3f(point), FVector2f(uv.X, uv.Y), 0.0f);
+		FGrassData d = FGrassData(FVector3f(point), height);
 		data.Add(d);
 	}
 
@@ -34,36 +34,30 @@ void GrassChunk::Empty()
 }
 
 void GrassChunk::ComputeGrass(
-	float globalTime, float cutoffDistance,
+	float cutoffDistance,
 	FMatrix& VP, FVector4f& cameraPosition,
-	float lambda, float minHeight, float maxHeight, 
-	UProceduralMeshComponent* grassMesh)
+	float lambda, UProceduralMeshComponent* grassMesh)
 {
 	if (data.Num() <= 0)
 		return;
 
-	FGPUFrustumCullingParams* params = new FGPUFrustumCullingParams();
+	FGrassDrawCallParams* params = new FGrassDrawCallParams();
 	params->CameraPosition = cameraPosition;
 	params->VP = FMatrix44f(VP);
 	params->Distance = cutoffDistance;
 	params->GrassDataBuffer = data;
-
-	UE_LOG(LogTemp, Warning, TEXT("Draw Call"));
-	FDispatchGrassGPUFrustumCulling dispatcer;
-	dispatcer.Dispatch(*params, [this, globalTime, lambda, minHeight, maxHeight, grassMesh](TArray<FGrassData>& grassData)
+	params->Lambda = lambda;
+	
+	FDispatchGrassDrawCall dispatcer;
+	dispatcer.Dispatch(*params, [this, grassMesh, params](TArray<FVector>& Points, TArray<int32>& Triangles)
 		{
-
-			GrassShaderExecutor* exec = new GrassShaderExecutor();
-			exec->globalWorldTime = globalTime;
-			exec->lambda = lambda;
-			exec->minHeight = minHeight;
-			exec->maxHeight = maxHeight;
-			exec->meshComponent = grassMesh;
-
-			exec->sectionId = id;
-			exec->points = grassData;
-			exec->StartBackgroundTask();
-
+			// Chiamata bloccante al MainThread
+			grassMesh->ClearMeshSection(id);
+			grassMesh->CreateMeshSection(id, Points, Triangles,
+				TArray<FVector>(), TArray<FVector2D>(), TArray<FColor>(), TArray<FProcMeshTangent>(), true);
+			delete& Points;
+			delete& Triangles;
+			delete params;
 		});
 
 }

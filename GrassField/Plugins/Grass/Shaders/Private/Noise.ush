@@ -22,6 +22,7 @@
      mod(-1.25, 1) == 0.75
     fmod(-1.25, 1) == -0.25
 */
+static float GWTime = 0.0f;
 
 #define mod(x, y) (x - y * floor(x / y))
 float lt(float a, float b)
@@ -566,7 +567,7 @@ float snoisefracal(float3 m)
 //--------------------------------------------------------------------------------------
 float3 normalNoise(float2 _st, float _zoom, float _speed)
 {
-    float time = GlobalWorldTime;
+    float time = GWTime;
     float2 v1 = _st;
     float2 v2 = _st;
     float2 v3 = _st;
@@ -642,7 +643,7 @@ float2 hash2(float2 p)
 
 float voronoi(in float2 x)
 {
-    const float t = GlobalWorldTime / SWITCH_TIME;
+    const float t = GWTime / SWITCH_TIME;
     const float function = mod(t, 4.0);
     const bool multiply_by_F1 = mod(t, 8.0) >= 4.0;
     const bool inverse = mod(t, 16.0) >= 8.0;
@@ -660,7 +661,7 @@ float voronoi(in float2 x)
             float2 g = float2(i, j);
             float2 o = hash2(n + g);
 
-            o = 0.5 + 0.41 * sin(GlobalWorldTime + 6.2831 * o);
+            o = 0.5 + 0.41 * sin(GWTime + 6.2831 * o);
             float2 r = g - f + o;
 
             float d = distance_type < 1.0 ? dot(r, r) : // euclidean^2

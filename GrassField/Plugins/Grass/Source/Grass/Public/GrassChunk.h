@@ -4,7 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "GrassShader.h"
-#include "DispatchGrassGPUFrustumCulling.h"
+#include "DispatchGrassDrawCall.h"
 #include "ProceduralMeshComponent.h"
 
 /**
@@ -26,11 +26,10 @@ public:
 	GrassChunk(TArray<FGrassData> data, FBox bounds, uint32 id);
 	
 	~GrassChunk();
-	bool AddGrassData(FVector point, FVector2D uv);
+	bool AddGrassData(FVector point, float height);
 	void ComputeGrass(
-		float globalTime, float cutoffDistance,
+		float cutoffDistance,
 		FMatrix& VP, FVector4f& cameraPosition,
-		float lambda, float minHeight, float maxHeight,
-		UProceduralMeshComponent* grassMesh);
+		float lambda, UProceduralMeshComponent* grassMesh);
 	void Empty();
 };

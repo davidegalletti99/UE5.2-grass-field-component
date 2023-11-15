@@ -24,7 +24,6 @@ void UGrassFieldComponent::SampleGrassData()
 		{
 			float offsetX = (FMath::SRand() - 0.5) * displacement;
 			float offsetY = (FMath::SRand() - 0.5) * displacement;
-
 			FVector start = p;
 			start.X += offsetX;
 			start.Y += offsetY;
@@ -39,7 +38,8 @@ void UGrassFieldComponent::SampleGrassData()
 
 			if (GetWorld()->LineTraceSingleByChannel(hit, start, end, mesh->GetCollisionObjectType())) 
 			{
-				AddGrassData(hit.ImpactPoint);
+				float height = FMath::Lerp(minHeight, maxHeight, FMath::SRand());
+				AddGrassData(hit.ImpactPoint, height);
 			}
 
 
@@ -79,18 +79,17 @@ void UGrassFieldComponent::ChunksInit()
 
 }
 
-void UGrassFieldComponent::AddGrassData(FVector point)
+void UGrassFieldComponent::AddGrassData(FVector point, float height)
 {
 	bool isAdded = false;
 	for (int i = 0; i < chunks.Num() && !isAdded; i++)
 	{
-		isAdded = chunks[i].AddGrassData(point, FVector2D());
+		isAdded = chunks[i].AddGrassData(point, height);
 	}
 }
 
 void UGrassFieldComponent::ComputeGrass()
 {
-	float globalTime = (float)GetWorld()->TimeSeconds;
 	ULocalPlayer* LocalPlayer = GetWorld()->GetFirstLocalPlayerFromController();
 
 	FSceneViewProjectionData ProjectionData;
@@ -99,18 +98,10 @@ void UGrassFieldComponent::ComputeGrass()
 	FVector4f cameraPosition = FVector4f(FVector3f(LocalPlayer->LastViewLocation), 1.0f);
 	FIntRect theViewRect = ProjectionData.GetViewRect();
 
-	UE_LOG(LogTemp, Warning, TEXT("CameraPosition = %s"), *cameraPosition.ToString());
-	UE_LOG(LogTemp, Warning, TEXT("Width = %d"), theViewRect.Width());
-	UE_LOG(LogTemp, Warning, TEXT("Height = %d"), theViewRect.Height());
-	UE_LOG(LogTemp, Warning, TEXT("P = %s"), *ProjectionData.ProjectionMatrix.ToString());
-	UE_LOG(LogTemp, Warning, TEXT("VP = %s"), *VP.ToString());
-
-	DrawDebugFrustum(GetWorld(), VP, FColor::Red, true, 1000.0f, 0, 1);
 	for (GrassChunk& chunk : chunks)
 	{
-		chunk.ComputeGrass(globalTime, cutoffDistance,
+		chunk.ComputeGrass(cutoffDistance,
 			VP, cameraPosition,
-			lambda, minHeight, maxHeight,
-			grassMesh);
+			lambda, grassMesh);
 	}
 }

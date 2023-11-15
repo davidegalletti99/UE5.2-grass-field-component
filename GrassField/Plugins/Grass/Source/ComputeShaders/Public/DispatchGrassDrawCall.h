@@ -3,7 +3,6 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "GrassGPUFrustumCulling.h"
 
 #include "RendererInterface.h"
 #include "RenderResource.h"
@@ -11,36 +10,42 @@
 #include "RenderGraphBuilder.h"
 #include "RenderGraphResources.h"
 #include "RenderGraphUtils.h"
-
 #include "Renderer/Private/ScenePrivate.h"
 
-struct COMPUTESHADERS_API FGPUFrustumCullingParams
+#include "GrassShader.h"
+#include "GrassGPUFrustumCulling.h"
+
+struct COMPUTESHADERS_API FGrassDrawCallParams
 {
 	FMatrix44f VP;
 	FVector4f CameraPosition;
 	float Distance; // Cutoff distance
 	TArray<FGrassData> GrassDataBuffer;
+	float Lambda;
 };
 
 /**
- * Class that dispatch the GPU Frustum Culling Algo.
- * to the Render Thread
+ * 
  */
-class COMPUTESHADERS_API FDispatchGrassGPUFrustumCulling {
+class COMPUTESHADERS_API FDispatchGrassDrawCall
+{
 public:
+	FDispatchGrassDrawCall();
+	~FDispatchGrassDrawCall();
+
 	// Executes this shader on the render thread
 	static void DispatchRenderThread(
 		FRHICommandListImmediate& RHICmdList,
-		FGPUFrustumCullingParams& Params,
-		TFunction<void(TArray<FGrassData>& grassData)> AsyncCallback);
+		FGrassDrawCallParams& Params,
+		TFunction<void(TArray<FVector>& GrassPoints, TArray<int32>& GrassTriangles)> AsyncCallback);
 
 	// Executes this shader on the render thread from the game thread via EnqueueRenderThreadCommand
 	static void DispatchGameThread(
-		FGPUFrustumCullingParams& Params,
-		TFunction<void(TArray<FGrassData>& grassData)> AsyncCallback);
+		FGrassDrawCallParams& Params,
+		TFunction<void(TArray<FVector>& GrassPoints, TArray<int32>& GrassTriangles)> AsyncCallback);
 
 	// Dispatches this shader. Can be called from any thread
 	static void Dispatch(
-		FGPUFrustumCullingParams& Params,
-		TFunction<void(TArray<FGrassData>& grassData)> AsyncCallback);
+		FGrassDrawCallParams& Params,
+		TFunction<void(TArray<FVector>& GrassPoints, TArray<int32>& GrassTriangles)> AsyncCallback);
 };

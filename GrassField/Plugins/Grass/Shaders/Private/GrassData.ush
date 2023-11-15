@@ -3,14 +3,12 @@
 struct GrassData
 {
     double3 position;
-    float2 uv;
-    float displacement;
+    float height;
 };
 */
 
 struct GrassData
 {
     float3 position;
-    float2 uv;
-    float displacement;
+    float height;
 };
