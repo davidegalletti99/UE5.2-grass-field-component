@@ -1,0 +1,16 @@
+/*
+// meglio per degli Open-World
+struct GrassData
+{
+    double3 position;
+    float2 uv;
+    float displacement;
+};
+*/
+
+struct GrassData
+{
+    float3 position;
+    float2 uv;
+    float displacement;
+};

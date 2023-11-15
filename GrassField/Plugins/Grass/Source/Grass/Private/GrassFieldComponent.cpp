@@ -3,16 +3,11 @@
 
 #include "GrassFieldComponent.h"
 #include "DispatchGrassGPUFrustumCulling.h"
+#include <Kismet/GameplayStatics.h>
+#include "GameFramework/HUD.h"
 
 UGrassFieldComponent::UGrassFieldComponent()
 {
-
-}
-void UGrassFieldComponent::Test()
-{
-	FGPUFrustumCullingParams* Params = new FGPUFrustumCullingParams();
-	FDispatchGrassGPUFrustumCulling::Dispatch(*Params, [this]() {});
-
 }
 
 void UGrassFieldComponent::SampleGrassData()
@@ -78,7 +73,7 @@ void UGrassFieldComponent::ChunksInit()
 			pMax.Y = stepY * (j + 1) + worldOffY;
 
 			uint32 id = i + j * gridSize;
-			chunks.Add(GrassChunk(TArray<FVector>(), FBox(pMin, pMax), id));
+			chunks.Add(GrassChunk(FBox(pMin, pMax), id));
 		}
 	}
 
@@ -96,8 +91,26 @@ void UGrassFieldComponent::AddGrassData(FVector point)
 void UGrassFieldComponent::ComputeGrass()
 {
 	float globalTime = (float)GetWorld()->TimeSeconds;
+	ULocalPlayer* LocalPlayer = GetWorld()->GetFirstLocalPlayerFromController();
+
+	FSceneViewProjectionData ProjectionData;
+	LocalPlayer->GetProjectionData(LocalPlayer->ViewportClient->Viewport, ProjectionData);
+	FMatrix VP = ProjectionData.ComputeViewProjectionMatrix();
+	FVector4f cameraPosition = FVector4f(FVector3f(LocalPlayer->LastViewLocation), 1.0f);
+	FIntRect theViewRect = ProjectionData.GetViewRect();
+
+	UE_LOG(LogTemp, Warning, TEXT("CameraPosition = %s"), *cameraPosition.ToString());
+	UE_LOG(LogTemp, Warning, TEXT("Width = %d"), theViewRect.Width());
+	UE_LOG(LogTemp, Warning, TEXT("Height = %d"), theViewRect.Height());
+	UE_LOG(LogTemp, Warning, TEXT("P = %s"), *ProjectionData.ProjectionMatrix.ToString());
+	UE_LOG(LogTemp, Warning, TEXT("VP = %s"), *VP.ToString());
+
+	DrawDebugFrustum(GetWorld(), VP, FColor::Red, true, 1000.0f, 0, 1);
 	for (GrassChunk& chunk : chunks)
 	{
-		chunk.ComputeGrass(globalTime, lambda, minHeight, maxHeight, grassMesh);
+		chunk.ComputeGrass(globalTime, cutoffDistance,
+			VP, cameraPosition,
+			lambda, minHeight, maxHeight,
+			grassMesh);
 	}
 }

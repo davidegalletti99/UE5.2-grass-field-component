@@ -25,17 +25,21 @@ void FDispatchGrassGPUFrustumCulling::DispatchRenderThread(
 		typename FScanShader::FPermutationDomain ScanPermutationVector;
 		typename FScanGroupSumsShader::FPermutationDomain ScanGroupSumsPermutationVector;
 		typename FCompactShader::FPermutationDomain CompactPermutationVector;
+		typename FResetArgsShader::FPermutationDomain ResetArgsPermutationVector;
 
 		TShaderMapRef<FVoteShader> VoteComputeShader(GetGlobalShaderMap(GMaxRHIFeatureLevel), VotePermutationVector);
 		TShaderMapRef<FScanShader> ScanComputeShader(GetGlobalShaderMap(GMaxRHIFeatureLevel), ScanPermutationVector);
 		TShaderMapRef<FScanGroupSumsShader> ScanGroupSumsComputeShader(GetGlobalShaderMap(GMaxRHIFeatureLevel), ScanGroupSumsPermutationVector);
 		TShaderMapRef<FCompactShader> CompactComputeShader(GetGlobalShaderMap(GMaxRHIFeatureLevel), CompactPermutationVector);
+		TShaderMapRef<FResetArgsShader> ResetArgsComputeShader(GetGlobalShaderMap(GMaxRHIFeatureLevel), ResetArgsPermutationVector);
+
 
 
 		bool bIsShaderValid =  VoteComputeShader.IsValid() 
 							&& ScanComputeShader.IsValid() 
 							&& ScanGroupSumsComputeShader.IsValid() 
-							&& CompactComputeShader.IsValid();
+							&& CompactComputeShader.IsValid()
+							&& ResetArgsComputeShader.IsValid();
 
 		if (Params.GrassDataBuffer.Num() > 0 && bIsShaderValid)
 		{
@@ -62,6 +66,7 @@ void FDispatchGrassGPUFrustumCulling::DispatchRenderThread(
 			FIntVector ScanGroupCount = FIntVector(numThreadGroups, 1, 1);
 			FIntVector ScanGroupSumsGroupCount = FIntVector(numGroupScanThreadGroups, 1, 1);
 			FIntVector CompactGroupCount = FIntVector(numThreadGroups, 1, 1);
+			FIntVector ResetArgsGroupCount = FIntVector(1, 1, 1);
 
 			// SRV creation
 			// GrassDataBuffer
@@ -72,10 +77,10 @@ void FDispatchGrassGPUFrustumCulling::DispatchRenderThread(
 				sizeof(FGrassData), GrassDataNum,
 				RawGrassData, sizeof(FGrassData) * GrassDataNum);
 			FRDGBufferSRVRef SRVGrassDataBuffer = GraphBuilder.CreateSRV(
-				FRDGBufferSRVDesc(GrassDataBuffer, EPixelFormat::PF_A32B32G32R32F));
+				FRDGBufferSRVDesc(GrassDataBuffer, EPixelFormat::PF_R32_UINT));
 
 			// UAV creation
-			// ArgsBuffer 
+			// ArgsBuffer
 			FRDGBufferRef ArgsBuffer = GraphBuilder.CreateBuffer(
 				FRDGBufferDesc::CreateStructuredDesc(sizeof(uint32), 5),
 				TEXT("ArgsBuffer"));
@@ -115,6 +120,9 @@ void FDispatchGrassGPUFrustumCulling::DispatchRenderThread(
 			FRDGBufferUAVRef UAVCulledGrassDataBuffer = GraphBuilder.CreateUAV(CulledGrassDataBuffer);
 
 			// Parameters setup
+			FResetArgsShader::FParameters* ResetArgsPassParameters =
+				GraphBuilder.AllocParameters<FResetArgsShader::FParameters>();
+
 			FVoteShader::FParameters* VotePassParameters =
 				GraphBuilder.AllocParameters<FVoteShader::FParameters>();
 
@@ -127,6 +135,8 @@ void FDispatchGrassGPUFrustumCulling::DispatchRenderThread(
 			FCompactShader::FParameters* CompactPassParameters =
 				GraphBuilder.AllocParameters<FCompactShader::FParameters>();
 
+			ResetArgsPassParameters->ArgsBuffer = UAVArgsBuffer;
+			
 			VotePassParameters->MATRIX_VP = Params.VP;
 			VotePassParameters->CameraPosition = Params.CameraPosition;
 			VotePassParameters->Distance = Params.Distance;
@@ -151,8 +161,14 @@ void FDispatchGrassGPUFrustumCulling::DispatchRenderThread(
 			//
 			// Adding Render Passes
 			//
-			
-			// https://www.reddit.com/r/unrealengine/comments/tqxmeq/how_to_add_dependency_between_compute_shaders_in/
+			FComputeShaderUtils::AddPass(
+				GraphBuilder,
+				RDG_EVENT_NAME("ExecuteResetArgsShader"),
+				ResetArgsComputeShader,
+				ResetArgsPassParameters,
+				ResetArgsGroupCount
+			);
+
 			FComputeShaderUtils::AddPass(
 				GraphBuilder,
 				RDG_EVENT_NAME("ExecuteVoteShader"),
@@ -194,22 +210,20 @@ void FDispatchGrassGPUFrustumCulling::DispatchRenderThread(
 			AddEnqueueCopyPass(GraphBuilder, GPUCulledGrassDataReadback, CulledGrassDataBuffer, grassBytes);
 			AddEnqueueCopyPass(GraphBuilder, GPUArgsReadback, ArgsBuffer, argsBytes);
 
-			UE_LOG(LogTemp, Warning, TEXT("GrassData.Num() = %d"), GrassDataNum);
-			auto RunnerFunc = [GPUCulledGrassDataReadback,
-				GPUArgsReadback, AsyncCallback]
+			auto RunnerFunc = [GPUCulledGrassDataReadback, grassBytes, GPUArgsReadback, argsBytes, AsyncCallback]
 				(auto&& RunnerFunc) -> void
 			{
 				if (GPUCulledGrassDataReadback->IsReady() && GPUArgsReadback->IsReady())
 				{
+					uint32* args = (uint32*) GPUArgsReadback->Lock(argsBytes);
+					uint32 CulledGrassNum = args[1];
+					uint32 CulledGrassSize = CulledGrassNum * sizeof(FGrassData);
 
-					uint32* args = (uint32*) GPUArgsReadback->Lock(GPUArgsReadback->GetGPUSizeBytes());
+					FGrassData* grassDataArr = (FGrassData*) GPUCulledGrassDataReadback->Lock(CulledGrassSize);
+					TArray<FGrassData>* GrassData = new TArray<FGrassData>(grassDataArr, CulledGrassNum);
+
 					GPUArgsReadback->Unlock();
-					UE_LOG(LogTemp, Warning, TEXT("args[1] = %d"), args[1]);
-
-					FGrassData* grassDataArr = (FGrassData*)GPUCulledGrassDataReadback->Lock(GPUCulledGrassDataReadback->GetGPUSizeBytes());
 					GPUCulledGrassDataReadback->Unlock();
-
-					TArray<FGrassData>* GrassData = new TArray<FGrassData>(grassDataArr, args[1]);
 
 					AsyncTask(ENamedThreads::GameThread, [GrassData, AsyncCallback]()
 						{

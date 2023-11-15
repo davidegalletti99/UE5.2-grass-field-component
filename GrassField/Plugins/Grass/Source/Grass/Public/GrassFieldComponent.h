@@ -12,6 +12,7 @@
 #include "GrassChunk.h"
 #include "Math.h"
 
+#include "Math/PerspectiveMatrix.h"
 #include "GrassFieldComponent.generated.h"
 
 /**
@@ -36,13 +37,16 @@ private:
 	TArray<GrassChunk> chunks;
 
 	UPROPERTY(EditAnywhere, Category = "Grass")
-		FBox bounds = FBox(FVector(-160, -160, -1), FVector(160, 160, 1));
+		FBox bounds = FBox(FVector(-160.0f, -160.0f, -1.0f), FVector(160.0f, 160.0f, 1.0f));
 
 	UPROPERTY(EditAnywhere, Category = "Grass")
 		int32 gridSize = 2;
 
 	UPROPERTY(EditAnywhere, Category = "Grass")
-		float lambda = 10;
+		float lambda = 10.0f;
+
+	UPROPERTY(EditAnywhere, Category = "Grass")
+		float cutoffDistance = 400.0f;
 
 	UPROPERTY(EditAnywhere, Category = "Grass")
 		int32 density = 10;
@@ -61,10 +65,6 @@ private:
 
 	UFUNCTION(CallInEditor, Category = "Grass")
 		void ComputeGrass();
-
-
-	UFUNCTION(CallInEditor, Category = "Grass")
-		void Test();
 
 	void AddGrassData(FVector point);
 };

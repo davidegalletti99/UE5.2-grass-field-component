@@ -72,7 +72,37 @@ void FGrassShaderInterface::DispatchRenderThread(
 
 		bool bIsShaderValid = ComputeShader.IsValid();
 
-		if (Params.Points.Num() > 0 && bIsShaderValid) {
+		if (Params.GrassDataBuffer.Num() > 0 && bIsShaderValid) {
+			
+			// SRV creation
+			// GrassDataBuffer
+			uint32 GrassDataNum = Params.GrassDataBuffer.Num();
+			const void* RawGrassData = (void*)Params.GrassDataBuffer.GetData();
+			FRDGBufferRef GrassDataBuffer = CreateStructuredBuffer(
+				GraphBuilder,
+				TEXT("GrassDataBuffer"),
+				sizeof(FGrassData), GrassDataNum,
+				RawGrassData, sizeof(FGrassData) * GrassDataNum);
+			FRDGBufferSRVRef SRVGrassDataBuffer = GraphBuilder.CreateSRV(
+				FRDGBufferSRVDesc(GrassDataBuffer, EPixelFormat::PF_A32B32G32R32F));
+
+
+			// UAV creation
+			// PointsBuffer 
+			int32 steps = 7;
+			int32 NumGrassPoints = GrassDataNum * (steps * 2 + 1);
+			FRDGBufferRef PointsBuffer = GraphBuilder.CreateBuffer(
+				FRDGBufferDesc::CreateStructuredDesc(sizeof(FVector3f), NumGrassPoints),
+				TEXT("PointsBuffer"));
+			FRDGBufferUAVRef UAVPointsBuffer = GraphBuilder.CreateUAV(PointsBuffer);
+
+			// TrianglesBuffer
+			int32 NumGrassTriangles = GrassDataNum * (steps * 2 - 1) * 2 * 3;
+			FRDGBufferRef TrianglesBuffer = GraphBuilder.CreateBuffer(
+				FRDGBufferDesc::CreateStructuredDesc(sizeof(int32), NumGrassTriangles),
+				TEXT("TrianglesBuffer"));
+			FRDGBufferUAVRef UAVTrianglesBuffer = GraphBuilder.CreateUAV(TrianglesBuffer);
+
 
 			FGrassShader::FParameters* PassParameters = GraphBuilder.AllocParameters<FGrassShader::FParameters>();
 
@@ -80,32 +110,11 @@ void FGrassShaderInterface::DispatchRenderThread(
 			PassParameters->MinHeight = Params.MinHeight;
 			PassParameters->MaxHeight = Params.MaxHeight;
 			PassParameters->Lambda = Params.Lambda;
-			PassParameters->Size = Params.Points.Num();
+			PassParameters->Size = Params.GrassDataBuffer.Num();
 
-			PassParameters->Position = FVector3f(Params.Position);
-			PassParameters->CameraDirection = FVector3f(Params.CameraDirection);
-
-			const void* RawPointsData = (void*)Params.Points.GetData();
-			int NumPoints = PassParameters->Size;
-			int PointsSize = sizeof(FVector4f);
-			FRDGBufferRef PointsBuffer = 
-				CreateUploadBuffer(GraphBuilder, TEXT("PointsBuffer"), PointsSize, NumPoints, 
-					RawPointsData, PointsSize * NumPoints);
-
-			PassParameters->Points = GraphBuilder.CreateSRV(FRDGBufferSRVDesc(PointsBuffer, EPixelFormat::PF_A32B32G32R32F));
-
-			int32 steps = 7;
-			int32 NumGrassPoints = NumPoints * (steps * 2 + 1);
-			FRDGBufferRef GrassPointsBuffer = GraphBuilder.CreateBuffer(
-				FRDGBufferDesc::CreateBufferDesc(sizeof(FVector4f), NumGrassPoints), TEXT("GrassPointsBuffer"));
-			PassParameters->GrassPoints = GraphBuilder.CreateUAV(
-				FRDGBufferUAVDesc(GrassPointsBuffer, EPixelFormat::PF_A32B32G32R32F));
-
-			int32 NumGrassTriangles = NumPoints * (steps * 2 - 1) * 2 * 3;
-			FRDGBufferRef GrassTrianglesBuffer = GraphBuilder.CreateBuffer(
-				FRDGBufferDesc::CreateBufferDesc(sizeof(int32), NumGrassTriangles), TEXT("GrassTrianglesBuffer"));
-			PassParameters->GrassTriangles = GraphBuilder.CreateUAV(
-				FRDGBufferUAVDesc(GrassTrianglesBuffer, EPixelFormat::PF_R32_SINT));
+			PassParameters->GrassDataBuffer = SRVGrassDataBuffer;
+			PassParameters->GrassPoints = UAVPointsBuffer;
+			PassParameters->GrassTriangles = UAVTrianglesBuffer;
 
 
 
@@ -119,14 +128,14 @@ void FGrassShaderInterface::DispatchRenderThread(
 					FComputeShaderUtils::Dispatch(RHICmdList, ComputeShader, *PassParameters, GroupCount);
 				});
 
-			int32 pointsBytes = sizeof(FVector4f) * NumGrassPoints;
+			int32 pointsBytes = sizeof(FVector3f) * NumGrassPoints;
 			int32 trianglesBytes = sizeof(int32) * NumGrassTriangles;
 
 			FRHIGPUBufferReadback* GPUPointsBufferReadback = new FRHIGPUBufferReadback(TEXT("ExecuteGrassShaderPoints"));
 			FRHIGPUBufferReadback* GPUTrianglesBufferReadback = new FRHIGPUBufferReadback(TEXT("ExecuteGrassShaderTriangles"));
 			
-			AddEnqueueCopyPass(GraphBuilder, GPUPointsBufferReadback, GrassPointsBuffer, pointsBytes);
-			AddEnqueueCopyPass(GraphBuilder, GPUTrianglesBufferReadback, GrassTrianglesBuffer, trianglesBytes);
+			AddEnqueueCopyPass(GraphBuilder, GPUPointsBufferReadback, PointsBuffer, pointsBytes);
+			AddEnqueueCopyPass(GraphBuilder, GPUTrianglesBufferReadback, TrianglesBuffer, trianglesBytes);
 
 			auto RunnerFunc = [GPUPointsBufferReadback, GPUTrianglesBufferReadback,
 				pointsBytes, NumGrassPoints, trianglesBytes, NumGrassTriangles, AsyncCallback](auto&& RunnerFunc) -> void
@@ -134,7 +143,7 @@ void FGrassShaderInterface::DispatchRenderThread(
 				if (GPUPointsBufferReadback->IsReady() && GPUTrianglesBufferReadback->IsReady())
 				{
 
-					FVector4f *points = (FVector4f*)GPUPointsBufferReadback->Lock(pointsBytes);
+					FVector3f *points = (FVector3f*)GPUPointsBufferReadback->Lock(pointsBytes);
 					GPUPointsBufferReadback->Unlock();
 
 					int32* triangles = (int32*)GPUTrianglesBufferReadback->Lock(trianglesBytes);
@@ -142,13 +151,10 @@ void FGrassShaderInterface::DispatchRenderThread(
 
 
 					TArray<FVector>* GrassPoints = new TArray<FVector>();
-					for (int i = 0; i < NumGrassPoints; i ++)
+					for (int i = 0; i < NumGrassPoints; ++i)
 					{
-						GrassPoints->Add(FVector(	points[i][0],
-													points[i][1],
-													points[i][2] ));
+						GrassPoints->Add(FVector(points[i]));
 					}
-
 					TArray<int32>* GrassTriangles = new TArray<int32>(triangles, NumGrassTriangles);
 
 					AsyncTask(ENamedThreads::GameThread, [AsyncCallback, GrassPoints, GrassTriangles]()
@@ -222,11 +228,9 @@ void GrassShaderExecutor::DoTaskWork()
 	FGrassShaderDispatchParams* Params =
 		new FGrassShaderDispatchParams(
 			globalWorldTime,
-			FVector(0, 0, 0),
 			points,
 			minHeight,
 			maxHeight,
-			cameraDirection,
 			lambda
 		);
 

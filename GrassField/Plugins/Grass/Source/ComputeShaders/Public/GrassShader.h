@@ -5,7 +5,7 @@
 #include "CoreMinimal.h"
 #include "EngineDefines.h"
 #include "UniformBuffer.h"
-
+#include "GrassData.h"
 
 #include "RHI.h"
 #include "RHICommandList.h"
@@ -52,7 +52,7 @@ struct COMPUTESHADERS_API FGrassShaderDispatchParams
 	float GlobalWorldTime;
 	float MinHeight;
 	float MaxHeight;
-	TArray<FVector4f> Points;
+	TArray<FGrassData> GrassDataBuffer;
 	FVector Position;
 	FVector CameraDirection;
 	float Lambda;
@@ -60,27 +60,20 @@ struct COMPUTESHADERS_API FGrassShaderDispatchParams
 
 	FGrassShaderDispatchParams(
 		float globalWorlTime, 
-		FVector position, 
-		TArray<FVector> points, 
+		TArray<FGrassData> grassData,
 		float minHeight, 
 		float maxHeight, 
-		FVector cameraDirection, 
 		float lambda)
-		:	X((int)points.Num() / NUM_THREADS_GrassShader_X + (int)(points.Num() % NUM_THREADS_GrassShader_X > 0)), 
+		:	X((int)grassData.Num() / NUM_THREADS_GrassShader_X + (int)(grassData.Num() % NUM_THREADS_GrassShader_X > 0)),
 			Y(1), 
 			Z(1),
 		GlobalWorldTime(globalWorlTime),
 		MinHeight(minHeight),
 		MaxHeight(maxHeight),
 		Lambda(lambda),
-		Position(position),
-		CameraDirection(cameraDirection)
+		GrassDataBuffer(grassData)
 
 	{
-		for (auto point : points)
-		{
-			Points.Add(FVector4f(FVector3f(point), 0.0));
-		}
 	}
 };
 
@@ -101,16 +94,14 @@ public:
 	using FPermutationDomain = TShaderPermutationDomain<FGrassShader_Perm_TEST>;
 
 	BEGIN_SHADER_PARAMETER_STRUCT(FGrassShaderDispatchParams, COMPUTESHADERS_API)
-		SHADER_PARAMETER(FVector3f, Position)
-		SHADER_PARAMETER(FVector3f, CameraDirection)
 		SHADER_PARAMETER(int, Size)
 		SHADER_PARAMETER(float, GlobalWorldTime)
 		SHADER_PARAMETER(float, Lambda)
 		SHADER_PARAMETER(float, MinHeight)
 		SHADER_PARAMETER(float, MaxHeight)
-		SHADER_PARAMETER_RDG_BUFFER_SRV(TArray<FVector4f>, Points)
-		SHADER_PARAMETER_RDG_BUFFER_UAV(RWBuffer<float>, GrassPoints)
-		SHADER_PARAMETER_RDG_BUFFER_UAV(RWBuffer<int>, GrassTriangles)
+		SHADER_PARAMETER_RDG_BUFFER_SRV(StructuredBuffer<FGrassData>, GrassDataBuffer)
+		SHADER_PARAMETER_RDG_BUFFER_UAV(RWStructuredBuffer<FVector3f>, GrassPoints)
+		SHADER_PARAMETER_RDG_BUFFER_UAV(RWStructuredBuffer<int32>, GrassTriangles)
 	END_SHADER_PARAMETER_STRUCT()
 
 	using FParameters = FGrassShaderDispatchParams;
@@ -169,8 +160,7 @@ public:
 	float minHeight;
 	float maxHeight;
 
-	TArray<FVector> points;
-	FVector cameraDirection;
+	TArray<FGrassData> points;
 
 	GrassShaderExecutor();
 private:

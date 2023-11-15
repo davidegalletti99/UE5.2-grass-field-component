@@ -1,5 +1,5 @@
 #include "/Engine/Public/Platform.ush"
-
+#include "GrassData.ush"
 
 float GlobalWorldTime;
 #include "Noise.usf"
@@ -8,15 +8,11 @@ float Lambda;
 float MinHeight;
 float MaxHeight;
 
-float3 Position;
-float3 CameraDirection;
-
 int Size;
-Buffer<float4> Points;
+StructuredBuffer<GrassData> GrassDataBuffer;
 
-RWBuffer<float4> GrassPoints;
-
-RWBuffer<int> GrassTriangles;
+RWStructuredBuffer<float3> GrassPoints;
+RWStructuredBuffer<int> GrassTriangles;
 
 
 static float G = 9.81;
@@ -25,7 +21,7 @@ static int minSteps = 7;
 
 void addPoint(in uint pointIdx, in float3 p)
 {
-    GrassPoints[pointIdx] = float4(p, 0);
+    GrassPoints[pointIdx] = p;
 }
 
 void addTri(in uint triIdx, in uint idx1, in uint idx2, in uint idx3)
@@ -43,14 +39,6 @@ float3 quadBez(in float p0, in float p1, in float p2, in float t)
 float invTan(in float x)
 {
     return 2 * atan(x) / 3.141;
-}
-
-int computeLODSteps(in float3 pos)
-{
-    float3 dist_vect = pos - Position;
-    float dist2 = dot(dist_vect, dist_vect);
-    
-    return int(lerp(minSteps, maxSteps, 1 - invTan(dist2)));
 }
 
 //  z
@@ -77,11 +65,6 @@ float3 movePoint(in float3 pi, in float3 vi, in float t)
     float3 p = pi + vi * t;
     p.z -= t * t * G / 2;
     return p;
-}
-
-uint vote(in float3 p)
-{
-    return uint(dot((Position - p), CameraDirection) > 0.5);
 }
 
 //  z
@@ -166,8 +149,9 @@ void Main(
     if (DispatchThreadId.x >= Size)
         return;
     
-    float3 p0 = Points[DispatchThreadId.x].xyz;
+    uint id = DispatchThreadId.x;
     
-    float steps = computeLODSteps(p0);
-    createGrass(DispatchThreadId.x, p0, steps);
+    float3 p0 = GrassDataBuffer[id].position;
+    
+    createGrass(id, p0, 7);
 }

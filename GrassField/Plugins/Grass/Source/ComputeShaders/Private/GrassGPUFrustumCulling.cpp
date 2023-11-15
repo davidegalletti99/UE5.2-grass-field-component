@@ -1,6 +1,3 @@
-// Fill out your copyright notice in the Description page of Project Settings.
-
-
 #include "GrassGPUFrustumCulling.h"
 
 // --------------------------------------------------------------
@@ -11,6 +8,7 @@ IMPLEMENT_GLOBAL_SHADER(FVoteShader, "/Shaders/GrassGPUFrustumCulling.usf", "Vot
 IMPLEMENT_GLOBAL_SHADER(FScanShader, "/Shaders/GrassGPUFrustumCulling.usf", "Scan", SF_Compute);
 IMPLEMENT_GLOBAL_SHADER(FScanGroupSumsShader, "/Shaders/GrassGPUFrustumCulling.usf", "ScanGroupSums", SF_Compute);
 IMPLEMENT_GLOBAL_SHADER(FCompactShader, "/Shaders/GrassGPUFrustumCulling.usf", "Compact", SF_Compute);
+IMPLEMENT_GLOBAL_SHADER(FResetArgsShader, "/Shaders/GrassGPUFrustumCulling.usf", "ResetArgs", SF_Compute);
 
 // Vote
 bool FVoteShader::ShouldCompilePermutation(const FGlobalShaderPermutationParameters& Parameters)
@@ -24,11 +22,6 @@ void FVoteShader::ModifyCompilationEnvironment(
 	FShaderCompilerEnvironment& OutEnvironment)
 {
 	FGlobalShader::ModifyCompilationEnvironment(Parameters, OutEnvironment);
-
-	// These defines are used in the thread count section of our shader
-	OutEnvironment.SetDefine(TEXT("THREADS_X"), NUM_THREADS_VoteShader_X);
-	OutEnvironment.SetDefine(TEXT("THREADS_Y"), NUM_THREADS_VoteShader_Y);
-	OutEnvironment.SetDefine(TEXT("THREADS_Z"), NUM_THREADS_VoteShader_Z);
 	OutEnvironment.CompilerFlags.Add(CFLAG_AllowTypedUAVLoads);
 }
 
@@ -44,11 +37,6 @@ void FScanShader::ModifyCompilationEnvironment(
 	FShaderCompilerEnvironment& OutEnvironment)
 {
 	FGlobalShader::ModifyCompilationEnvironment(Parameters, OutEnvironment);
-
-	// These defines are used in the thread count section of our shader
-	OutEnvironment.SetDefine(TEXT("THREADS_X"), NUM_THREADS_ScanShader_X);
-	OutEnvironment.SetDefine(TEXT("THREADS_Y"), NUM_THREADS_ScanShader_Y);
-	OutEnvironment.SetDefine(TEXT("THREADS_Z"), NUM_THREADS_ScanShader_Z);
 	OutEnvironment.CompilerFlags.Add(CFLAG_AllowTypedUAVLoads);
 }
 
@@ -64,11 +52,6 @@ void FScanGroupSumsShader::ModifyCompilationEnvironment(
 	FShaderCompilerEnvironment& OutEnvironment)
 {
 	FGlobalShader::ModifyCompilationEnvironment(Parameters, OutEnvironment);
-
-	// These defines are used in the thread count section of our shader
-	OutEnvironment.SetDefine(TEXT("THREADS_X"), NUM_THREADS_ScanGroupSumsShader_X);
-	OutEnvironment.SetDefine(TEXT("THREADS_Y"), NUM_THREADS_ScanGroupSumsShader_Y);
-	OutEnvironment.SetDefine(TEXT("THREADS_Z"), NUM_THREADS_ScanGroupSumsShader_Z);
 	OutEnvironment.CompilerFlags.Add(CFLAG_AllowTypedUAVLoads);
 }
 
@@ -84,10 +67,20 @@ void FCompactShader::ModifyCompilationEnvironment(
 	FShaderCompilerEnvironment& OutEnvironment)
 {
 	FGlobalShader::ModifyCompilationEnvironment(Parameters, OutEnvironment);
+	OutEnvironment.CompilerFlags.Add(CFLAG_AllowTypedUAVLoads);
+}
 
-	// These defines are used in the thread count section of our shader
-	OutEnvironment.SetDefine(TEXT("THREADS_X"), NUM_THREADS_CompactShader_X);
-	OutEnvironment.SetDefine(TEXT("THREADS_Y"), NUM_THREADS_CompactShader_Y);
-	OutEnvironment.SetDefine(TEXT("THREADS_Z"), NUM_THREADS_CompactShader_Z);
+// Reset Args
+bool FResetArgsShader::ShouldCompilePermutation(const FGlobalShaderPermutationParameters& Parameters)
+{
+	const FPermutationDomain PermutationVector(Parameters.PermutationId);
+	return true;
+}
+
+void FResetArgsShader::ModifyCompilationEnvironment(
+	const FGlobalShaderPermutationParameters& Parameters,
+	FShaderCompilerEnvironment& OutEnvironment)
+{
+	FGlobalShader::ModifyCompilationEnvironment(Parameters, OutEnvironment);
 	OutEnvironment.CompilerFlags.Add(CFLAG_AllowTypedUAVLoads);
 }

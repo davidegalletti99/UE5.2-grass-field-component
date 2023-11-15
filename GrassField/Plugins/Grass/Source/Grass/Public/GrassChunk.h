@@ -4,17 +4,8 @@
 
 #include "CoreMinimal.h"
 #include "GrassShader.h"
+#include "DispatchGrassGPUFrustumCulling.h"
 #include "ProceduralMeshComponent.h"
-
-struct GrassData
-{
-	FVector point;
-	FVector2D uv;
-
-	GrassData(FVector point, FVector2D uv) 
-		: point(point), uv(uv) 
-	{}
-};
 
 /**
  * 
@@ -28,14 +19,18 @@ public:
 
 	FVector center;
 	FBox bounds;
-	TArray<FVector> data;
+	TArray<FGrassData> data;
 
 	GrassChunk();
 	GrassChunk(FBox bounds, uint32 id);
-	GrassChunk(TArray<FVector> data, FBox bounds, uint32 id);
+	GrassChunk(TArray<FGrassData> data, FBox bounds, uint32 id);
 	
 	~GrassChunk();
 	bool AddGrassData(FVector point, FVector2D uv);
-	void ComputeGrass(float globalTime, float lambda, float minHeight, float maxHeight, UProceduralMeshComponent* grassMesh);
+	void ComputeGrass(
+		float globalTime, float cutoffDistance,
+		FMatrix& VP, FVector4f& cameraPosition,
+		float lambda, float minHeight, float maxHeight,
+		UProceduralMeshComponent* grassMesh);
 	void Empty();
 };
