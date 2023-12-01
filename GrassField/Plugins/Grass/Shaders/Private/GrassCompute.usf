@@ -1,8 +1,10 @@
 #include "/Engine/Private/Common.ush"
 #include "GrassUtil.ush"
+#include "Noise.ush"
 
 RWStructuredBuffer<uint> RWCounter;
 
+uint GrassDataSize;
 float4x4 VP_MATRIX;
 float CutoffDistance;
 float3 CameraPosition;
@@ -68,6 +70,9 @@ void CullGrassDataCS(
     uint3 GropupId : SV_GroupID)
 {
     uint GrassIndex = DispatchThreadId.x;
+    if (GrassIndex >= GrassDataSize)
+        return;
+    
     PackedGrassData Data = GrassDataBuffer[GrassIndex];
     
     bool inView = IsInViewFrustum(Data.Position, VP_MATRIX, 0.2f);
@@ -93,13 +98,13 @@ void CreateGrassBlade(LodGrassData Data)
     float3 p0 = Data.Position;
     float height = Data.Height;
     
-    
-    float3 v0 = computeInitialVelocity(float3(0, 0, 1), height);
-    float epsilon = 0; // (snoise(p0 / 1000) - 0.5f) * Lambda;
+    float3 seed = rand3(p0);
+    float3 v0 = computeInitialVelocity(seed, height);
+    float epsilon = (snoise(p0 / 1000) - 0.5f) * Lambda;
     float te = (v0.z - epsilon) / GRAVITATIONAL_ACCELERATION;
     
     float maxThickness = height * 0.02;
-    float3 normal = float3(0, 1, 0); // normalize(cross(v0, float3(v0.xy, 0)));
+    float3 normal = normalize(cross(v0, float3(v0.xy, 0)));
     
     uint VertexId, IndexId;
     InterlockedAdd(RWCounter[1], LodSteps * 2 + 1, VertexId);

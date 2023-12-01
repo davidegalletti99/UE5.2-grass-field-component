@@ -341,7 +341,7 @@ FPrimitiveViewRelevance FGrassSceneProxy::GetViewRelevance(const FSceneView *Vie
 	Result.bRenderInMainPass = ShouldRenderInMainPass();
 	Result.bUsesLightingChannels = GetLightingChannelMask() != GetDefaultLightingChannelMask();
 	Result.bRenderCustomDepth = ShouldRenderCustomDepth();
-	Result.bTranslucentSelfShadow = false;
+	Result.bTranslucentSelfShadow = true;
 	Result.bVelocityRelevance = false;
 	MaterialRelevance.SetPrimitiveViewRelevance(Result);
 	return Result;
@@ -486,6 +486,7 @@ namespace GrassMesh
 
 		BEGIN_SHADER_PARAMETER_STRUCT(FParameters, )
 			SHADER_PARAMETER(FVector3f, CameraPosition)
+			SHADER_PARAMETER(uint32, GrassDataSize)
 			SHADER_PARAMETER(float, CutoffDistance)
 			SHADER_PARAMETER(FMatrix44f, VP_MATRIX)
 			SHADER_PARAMETER_RDG_BUFFER_UAV(RWStructuredBuffer<uint32>, RWCounter)
@@ -515,6 +516,7 @@ namespace GrassMesh
 		using FPermutationDomain = TShaderPermutationDomain<FReuseCullDim>;
 
 		BEGIN_SHADER_PARAMETER_STRUCT(FParameters, )
+			SHADER_PARAMETER(float, Lambda)
 			SHADER_PARAMETER_RDG_BUFFER_UAV(RWStructuredBuffer<uint32>, RWCounter)
 			SHADER_PARAMETER_RDG_BUFFER_SRV(StructuredBuffer<FPackedLodGrassData>, CulledGrassDataBuffer)
 			SHADER_PARAMETER_UAV(RWStructuredBuffer<FGrassVertex>, RWVertexBuffer)
@@ -807,6 +809,7 @@ namespace GrassMesh
 		PassParameters->VP_MATRIX = InViewDesc.ViewProjectionMatrix;
 		PassParameters->CameraPosition = InViewDesc.ViewOrigin;
 		PassParameters->CutoffDistance = ProxyDesc.CutOffDistance;
+		PassParameters->GrassDataSize = ProxyDesc.GrassData->Num();
 		PassParameters->GrassDataBuffer = InVolatileResources.GrassDataBufferSRV;
 		PassParameters->RWCulledGrassDataBuffer = InVolatileResources.CulledGrassDataBufferUAV;
 		PassParameters->RWIndirectArgsBuffer = InVolatileResources.IndirectArgsBufferUAV;
@@ -834,6 +837,7 @@ namespace GrassMesh
 		FComputeGrassMesh_CS::FParameters *PassParameters =
 			GraphBuilder.AllocParameters<FComputeGrassMesh_CS::FParameters>();
 		PassParameters->RWCounter = InVolatileResources.CounterUAV;
+		PassParameters->Lambda = InProxyDesc.Lambda;
 		PassParameters->CulledGrassDataBuffer = InVolatileResources.CulledGrassDataBufferSRV;
 		PassParameters->RWInstanceBuffer = InOutputResources.InstanceBufferUAV;
 		PassParameters->RWVertexBuffer = InProxyDesc.VertexBuffer->VertexBufferUAV;

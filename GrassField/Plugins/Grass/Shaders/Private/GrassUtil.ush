@@ -2,11 +2,13 @@
 // #include "Noise.ush"
 
 #define GRAVITATIONAL_ACCELERATION 9.81
-#define PI 3.141
+#define PI 3.14159265359
+#define SQ_2PI 2.50662827463
 
 // Calcola la curva di Bézier quadratica
 #define quadBez(p0, p1, p2, t) (lerp(p0, lerp(p1, p2, t), t))
 #define invTanMap(x) (2 * atan(x) / PI)
+#define gaussianMap(m, s, x) (exp(-(x - m)*(x - m) / (2 * s * s)) / (s * SQ_2PI))
 
 /** 
  * Struct per la generazione dei fili d'erba
@@ -179,7 +181,7 @@ float3 computeInitialVelocity(in float3 seed, in float height)
 uint computeLodSteps(in uint2 MinMaxLod, float CutoffDistance, in float3 CameraPosition, in float3 PointPosition)
 {
     float dist = distance(CameraPosition, PointPosition);
-    return ceil(lerp(MinMaxLod.x, MinMaxLod.y,  1 - dist / CutoffDistance));
+    return ceil(lerp(MinMaxLod.x, MinMaxLod.y, gaussianMap(0, 0.4f, 2 * dist / CutoffDistance)));
 
 }
 
