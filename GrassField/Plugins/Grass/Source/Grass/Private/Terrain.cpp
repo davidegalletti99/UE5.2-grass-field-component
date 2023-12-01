@@ -16,11 +16,9 @@ ATerrain::ATerrain()
 	this->AddComponent(TEXT("Grass Mesh"), false, FTransform(), grassMeshComponent);
 
 	grassFieldComponent = this->CreateDefaultSubobject<UGrassFieldComponent>(TEXT("GrassField"));
-	grassFieldComponent->grassMesh = grassMeshComponent;
-	grassFieldComponent->mesh = meshComponent;
+	grassFieldComponent->SurfaceMesh = meshComponent;
 	this->AddComponent(TEXT("Grass Field"), false, FTransform(), grassFieldComponent);
 
-	grassFieldComponent->ChunksInit();
 }
 
 // Called when the game starts or when spawned

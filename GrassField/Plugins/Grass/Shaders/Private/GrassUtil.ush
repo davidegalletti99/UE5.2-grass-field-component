@@ -1,0 +1,286 @@
+#pragma once
+// #include "Noise.ush"
+
+#define GRAVITATIONAL_ACCELERATION 9.81
+#define PI 3.141
+
+// Calcola la curva di Bézier quadratica
+#define quadBez(p0, p1, p2, t) (lerp(p0, lerp(p1, p2, t), t))
+#define invTanMap(x) (2 * atan(x) / PI)
+
+/** 
+ * Struct per la generazione dei fili d'erba
+ */
+struct GrassData
+{
+    // Position -> 4 x 3 Byte
+    // Height -> 2 Byte
+    // Offset -> 2 Byte
+    float3 Position;
+    float Height;
+    float Offset;
+};
+
+struct PackedGrassData
+{
+    float3 Position;
+    uint HeightAndOffset;
+};
+
+struct LodGrassData
+{
+    float3 Position;
+    uint LodLevel;
+    float Height;
+    float Offset;
+};
+
+struct PackedLodGrassData
+{
+    float3 Position;
+    uint LodLevel;
+    uint HeightAndOffset;
+};
+
+
+PackedGrassData Pack(GrassData InData)
+{
+    PackedGrassData OutData = (PackedGrassData) 0;
+    
+    // prendo i 4 bit medno significativi dall'esponente e 12 dalla mantissa
+    // 0    7    f    f    f    8    0    0
+    // 0000 0111 1111 1111 1111 1000 0000 0000
+    OutData.HeightAndOffset = (asuint(InData.Height) & 0x7fff8000) << 1;
+    
+    // prendo i 3 bit medno significativi dall'esponente e 13 dalla mantissa    
+    // 0    3    f    f    f    a    0    0
+    // 0000 0011 1111 1111 1111 1100 0000 0000
+    OutData.HeightAndOffset |= (asuint(InData.Offset) & 0x3fffa000) >> 14;
+
+    OutData.Position = InData.Position;
+    return OutData;
+}
+
+GrassData Unpack(PackedGrassData InData)
+{
+    GrassData OutData = (GrassData) 0;
+    
+    OutData.Position = InData.Position;
+    OutData.Height = asfloat((InData.HeightAndOffset & 0xffff0000) >> 1);
+    OutData.Offset = asfloat((InData.HeightAndOffset & 0x0000ffff) << 14);
+    
+    return OutData;
+}
+
+LodGrassData Unpack(PackedLodGrassData InData)
+{
+    LodGrassData OutData = (LodGrassData) 0;
+    
+    OutData.Position = InData.Position;
+    OutData.LodLevel = InData.LodLevel;
+    OutData.Height = asfloat((InData.HeightAndOffset & 0xffff0000) >> 1);
+    OutData.Offset = asfloat((InData.HeightAndOffset & 0x0000ffff) << 14);
+    
+    return OutData;
+}
+    
+
+struct GrassVertex
+{
+    float3 Position;
+    float2 UV;
+    float3 Normal;
+};
+
+struct GrassInstance
+{
+    float3 Position;
+    float Offset; // Animation Offset
+};
+
+/** Return false if the AABB is completely outside one of the planes. */
+bool PlaneTestAABB(in float4 InPlanes[5], in float3 InCenter, in float3 InExtent)
+{
+    bool bPlaneTest = true;
+	
+	[unroll]
+    for (uint PlaneIndex = 0; PlaneIndex < 5; ++PlaneIndex)
+    {
+        float3 PlaneSigns;
+        PlaneSigns.x = InPlanes[PlaneIndex].x >= 0.f ? 1.f : -1.f;
+        PlaneSigns.y = InPlanes[PlaneIndex].y >= 0.f ? 1.f : -1.f;
+        PlaneSigns.z = InPlanes[PlaneIndex].z >= 0.f ? 1.f : -1.f;
+
+        bool bInsidePlane = dot(InPlanes[PlaneIndex], float4(InCenter + InExtent * PlaneSigns, 1.0f)) > 0.f;
+        bPlaneTest = bPlaneTest && bInsidePlane;
+    }
+
+    return bPlaneTest;
+}
+
+bool IsInViewFrustum(in float3 position, in float4x4 ViewProjectionMatrix, in float margin)
+{
+    float4 position4 = float4(position, 1.0f);
+    float4 viewspace = mul(position4, ViewProjectionMatrix);
+    
+    float3 clipspace = viewspace.xyz;
+    clipspace /= viewspace.w;
+
+    clipspace.xy = clipspace.xy / 2.0f + 0.5f;
+    
+    return clipspace.x >= 0.0f - margin && clipspace.x <= 1.0f + margin
+        && clipspace.y >= 0.0f - margin && clipspace.y <= 1.0f + margin
+        && clipspace.z >= 0.0f && clipspace.z <= 1.0f;
+}
+
+/**
+ * Aggiunge il vertice @data al buffer @VertexBuffer 
+ * in posizione @vertexPos
+ */ 
+void addPoint(
+    in RWStructuredBuffer<GrassVertex> VertexBuffer,
+    in uint vertexPos, in GrassVertex data)
+{
+    VertexBuffer[vertexPos] = data;
+}
+
+/**
+ * Aggiunge il triangolo definiito dagli indici @idx1, @idx2 e @idx3 
+ * al buffer @IndexBuffer partendo dalla posizione @indexPos
+ */
+void addTri(
+    in RWStructuredBuffer<uint> IndexBuffer, 
+    in uint indexPos, in uint idx1, in uint idx2, in uint idx3)
+{
+    IndexBuffer[indexPos + 0] = idx1;
+    IndexBuffer[indexPos + 1] = idx2;
+    IndexBuffer[indexPos + 2] = idx3;
+}
+
+//  z
+//  |
+//  |
+//  |         * *         -
+//  |    y  *     *       |
+//  |   /  *              | height
+//  |  /  *               |
+//  | /  *                |
+//  |/   *                -
+//  +-------------------------- x
+//  0
+float3 computeInitialVelocity(in float3 seed, in float height)
+{
+    float3 v0 = seed;
+    v0.xy += sign(v0.xy) * 1.5;
+    v0.z = sqrt(2 * GRAVITATIONAL_ACCELERATION * height);
+    return v0;
+}
+
+uint computeLodSteps(in uint2 MinMaxLod, float CutoffDistance, in float3 CameraPosition, in float3 PointPosition)
+{
+    float dist = distance(CameraPosition, PointPosition);
+    return ceil(lerp(MinMaxLod.x, MinMaxLod.y,  1 - dist / CutoffDistance));
+
+}
+
+float3 movePoint(in float3 pi, in float3 vi, in float t)
+{
+    float3 p = pi + vi * t;
+    p.z -= t * t * GRAVITATIONAL_ACCELERATION / 2;
+    return p;
+}
+
+//  z
+//  |
+//  |
+//  |         * *
+//  |    y  *     * pe (t = te)
+//  |   /  *    
+//  |  /  *
+//  | /  *
+//  |/   * p0 (t = 0)
+//  +-------------------------- x
+//  0
+void createGrass(
+    in RWStructuredBuffer<GrassVertex> VertexBuffer, in uint VertexCounter,
+    in RWStructuredBuffer<uint> IndexBuffer, in uint IndexCounter,
+    in LodGrassData Data, 
+    in float Lambda)
+{
+    float3 p0 = Data.Position;
+    float height = Data.Height;
+    uint LodSteps = Data.LodLevel;
+    
+    
+    float3 v0 = float3(0, 0, 1); // computeInitialVelocity(ext, height);
+    float epsilon = 0; // (snoise(p0 / 1000) - 0.5f) * Lambda;
+    float te = (v0.z - epsilon) / GRAVITATIONAL_ACCELERATION;
+    
+    float maxThickness = height * 0.02;
+    float3 normal = float3(0, 1, 0); // normalize(cross(v0, float3(v0.xy, 0)));
+    
+    uint VertexId, IndexId;
+    InterlockedAdd(VertexCounter, (LodSteps * 2 + 1), VertexId);
+    InterlockedAdd(IndexCounter, (LodSteps * 2 - 1) * 2, IndexId);
+    
+    for (uint i = 0; i < LodSteps; i++, VertexId += 2, IndexId += 6 * 2)
+    {
+        float perc = float(i) / LodSteps;
+        float t = perc * te;
+        float3 p = movePoint(p0, v0, t);
+        float thickness = quadBez(maxThickness, maxThickness * 0.85, 0, perc);
+        
+        GrassVertex p1, p2;
+        
+        // p1
+        p1.Position = p - normal * thickness;
+        p1.UV = float2(0, 0);
+        p1.Normal = float3(0, 1, 0);
+        addPoint(VertexBuffer, VertexId + 0, p1);
+        
+        // p2
+        p2.Position = p + normal * thickness;
+        p2.UV = float2(0, 0);
+        p2.Normal = float3(0, 1, 0);
+        addPoint(VertexBuffer, VertexId + 1, p1);
+        
+        
+        if (i < LodSteps - 1)
+        {
+            // t1
+            // front
+            addTri(IndexBuffer, IndexId + 0, 
+                VertexId + 0, VertexId + 1, VertexId + 3);
+            // back
+            addTri(IndexBuffer, IndexId + 3, 
+                VertexId + 0, VertexId + 3, VertexId + 1);
+                
+            // t2
+            // front
+            addTri(IndexBuffer, IndexId + 6, 
+                VertexId + 0, VertexId + 3, VertexId + 2);
+            // back
+            addTri(IndexBuffer, IndexId + 9, 
+                VertexId + 0, VertexId + 2, VertexId + 3); 
+        }
+        else
+        {
+            // last triangle
+            // front
+            addTri(IndexBuffer, IndexId + 0, 
+                VertexId + 0, VertexId + 1, VertexId + 2);
+            // back
+            addTri(IndexBuffer,IndexId + 3, 
+                VertexId + 0, VertexId + 2, VertexId + 1);
+        }
+        
+    }
+    
+    GrassVertex pe;
+    
+    // last point
+    pe.Position = movePoint(p0, v0, te);
+    pe.UV = float2(0, 0);
+    pe.Normal = float3(0, 1, 0);
+    addPoint(VertexBuffer, VertexId, pe);
+}

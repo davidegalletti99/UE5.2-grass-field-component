@@ -14,7 +14,7 @@ IMPLEMENT_GLOBAL_SHADER(FResetArgsShader, "/Shaders/GrassGPUFrustumCulling.usf",
 bool FVoteShader::ShouldCompilePermutation(const FGlobalShaderPermutationParameters& Parameters)
 {
 	const FPermutationDomain PermutationVector(Parameters.PermutationId);
-	return true;
+	return IsFeatureLevelSupported(Parameters.Platform, ERHIFeatureLevel::SM6);
 }
 
 void FVoteShader::ModifyCompilationEnvironment(
@@ -29,7 +29,7 @@ void FVoteShader::ModifyCompilationEnvironment(
 bool FScanShader::ShouldCompilePermutation(const FGlobalShaderPermutationParameters& Parameters)
 {
 	const FPermutationDomain PermutationVector(Parameters.PermutationId);
-	return true;
+	return IsFeatureLevelSupported(Parameters.Platform, ERHIFeatureLevel::SM6);
 }
 
 void FScanShader::ModifyCompilationEnvironment(
@@ -44,7 +44,7 @@ void FScanShader::ModifyCompilationEnvironment(
 bool FScanGroupSumsShader::ShouldCompilePermutation(const FGlobalShaderPermutationParameters& Parameters)
 {
 	const FPermutationDomain PermutationVector(Parameters.PermutationId);
-	return true;
+	return IsFeatureLevelSupported(Parameters.Platform, ERHIFeatureLevel::SM6);
 }
 
 void FScanGroupSumsShader::ModifyCompilationEnvironment(
@@ -59,7 +59,7 @@ void FScanGroupSumsShader::ModifyCompilationEnvironment(
 bool FCompactShader::ShouldCompilePermutation(const FGlobalShaderPermutationParameters& Parameters)
 {
 	const FPermutationDomain PermutationVector(Parameters.PermutationId);
-	return true;
+	return IsFeatureLevelSupported(Parameters.Platform, ERHIFeatureLevel::SM6);
 }
 
 void FCompactShader::ModifyCompilationEnvironment(
@@ -74,7 +74,7 @@ void FCompactShader::ModifyCompilationEnvironment(
 bool FResetArgsShader::ShouldCompilePermutation(const FGlobalShaderPermutationParameters& Parameters)
 {
 	const FPermutationDomain PermutationVector(Parameters.PermutationId);
-	return true;
+	return IsFeatureLevelSupported(Parameters.Platform, ERHIFeatureLevel::SM6);
 }
 
 void FResetArgsShader::ModifyCompilationEnvironment(

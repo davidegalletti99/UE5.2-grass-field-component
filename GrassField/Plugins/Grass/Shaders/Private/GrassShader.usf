@@ -12,16 +12,16 @@ RWStructuredBuffer<uint> ArgsBuffer;
 RWStructuredBuffer<GrassData> GrassDataBuffer;
 
 RWStructuredBuffer<float3> GrassPoints;
-RWStructuredBuffer<int> GrassTriangles;
+RWStructuredBuffer<uint> GrassTriangles;
 
 static int maxSteps = 7;
 static int minSteps = 7;
 
 // Aggiunge il punto @p al buffer GrassPoints 
 // in posizione @pointIdx
-void addPoint(in uint pointIdx, in float3 p)
+void addPoint(in RWStructuredBuffer<float3> InstanceBuffer, in uint pointIdx, in float3 p)
 {
-    GrassPoints[pointIdx] = p;
+    InstanceBuffer[pointIdx] = p;
     
     // solo per debug (da modificare)
     InterlockedAdd(ArgsBuffer[2], 1);
@@ -30,11 +30,11 @@ void addPoint(in uint pointIdx, in float3 p)
 
 // Aggiunge il triangolo definiito dagli indici @idx1, @idx2 e @idx3 
 // al buffer GrassTriangles in partendo dalla posizione @triIdx
-void addTri(in uint triIdx, in uint idx1, in uint idx2, in uint idx3)
+void addTri(in RWStructuredBuffer<uint> IndexBuffer, in uint triIdx, in uint idx1, in uint idx2, in uint idx3)
 {
-    GrassTriangles[triIdx + 0] = idx1;
-    GrassTriangles[triIdx + 1] = idx2;
-    GrassTriangles[triIdx + 2] = idx3;
+    IndexBuffer[triIdx + 0] = idx1;
+    IndexBuffer[triIdx + 1] = idx2;
+    IndexBuffer[triIdx + 2] = idx3;
     
     // solo per debug (da modificare)
     InterlockedAdd(ArgsBuffer[3], 3);
@@ -111,35 +111,35 @@ void createGrass(in uint idx, in float3 p0, in float height, in int steps)
         
         // p1
         float3 p1 = p - normal * thickness;
-        addPoint(grassPIdx + 0, p1);
+        addPoint(GrassPoints, grassPIdx + 0, p1);
         
         // p2
         float3 p2 = p + normal * thickness;
-        addPoint(grassPIdx + 1, p2);
+        addPoint(GrassPoints, grassPIdx + 1, p2);
         
         
         if (i < steps - 1)
         {
             // t1
-            addTri(grassTIdx + 0, grassPIdx + 0, grassPIdx + 1, grassPIdx + 3); // front
-            addTri(grassTIdx + 3, grassPIdx + 0, grassPIdx + 3, grassPIdx + 1); // back
+            addTri(GrassTriangles, grassTIdx + 0, grassPIdx + 0, grassPIdx + 1, grassPIdx + 3); // front
+            addTri(GrassTriangles, grassTIdx + 3, grassPIdx + 0, grassPIdx + 3, grassPIdx + 1); // back
                 
             // t2
-            addTri(grassTIdx + 6, grassPIdx + 0, grassPIdx + 3, grassPIdx + 2); // front
-            addTri(grassTIdx + 9, grassPIdx + 0, grassPIdx + 2, grassPIdx + 3); // back
+            addTri(GrassTriangles, grassTIdx + 6, grassPIdx + 0, grassPIdx + 3, grassPIdx + 2); // front
+            addTri(GrassTriangles, grassTIdx + 9, grassPIdx + 0, grassPIdx + 2, grassPIdx + 3); // back
         }
         else
         {
             // last triangle
-            addTri(grassTIdx + 0, grassPIdx + 0, grassPIdx + 1, grassPIdx + 2); // front
-            addTri(grassTIdx + 3, grassPIdx + 0, grassPIdx + 2, grassPIdx + 1); // back
+            addTri(GrassTriangles, grassTIdx + 0, grassPIdx + 0, grassPIdx + 1, grassPIdx + 2); // front
+            addTri(GrassTriangles, grassTIdx + 3, grassPIdx + 0, grassPIdx + 2, grassPIdx + 1); // back
         }
         
     }
     
     // last point
     float3 pe = movePoint(p0, v0, te);
-    addPoint(grassPIdx, pe);
+    addPoint(GrassPoints, grassPIdx, pe);
 }
 
 

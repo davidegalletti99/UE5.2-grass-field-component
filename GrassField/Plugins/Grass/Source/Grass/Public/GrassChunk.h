@@ -3,8 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "GrassShader.h"
-#include "DispatchGrassDrawCall.h"
+#include "GrassData.h"
 #include "ProceduralMeshComponent.h"
 
 /**
@@ -19,11 +18,11 @@ public:
 
 	FVector center;
 	FBox bounds;
-	TArray<FGrassData> data;
+	TArray<GrassMesh::FPackedGrassData> data;
 
 	GrassChunk();
 	GrassChunk(FBox bounds, uint32 id);
-	GrassChunk(TArray<FGrassData> data, FBox bounds, uint32 id);
+	GrassChunk(TArray<GrassMesh::FPackedGrassData> data, FBox bounds, uint32 id);
 	
 	~GrassChunk();
 	bool AddGrassData(FVector point, float height);

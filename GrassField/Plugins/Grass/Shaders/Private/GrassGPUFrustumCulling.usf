@@ -1,7 +1,7 @@
 #include "/Engine/Public/Platform.ush"
 #include "/Engine/Private/Common.ush"
 
-#include "GrassData.ush"
+#include "GrassUtil.ush"
 
 #define NUM_THREAD_GROUPS_X 64
 
@@ -29,7 +29,7 @@ void Vote(
 	uint3 GroupId : SV_GroupID,
 	uint GroupIndex : SV_GroupIndex)
 {
-    float4 position = float4(GrassDataBuffer[DispatchThreadId.x].position, 1.0f);
+    float4 position = float4(GrassDataBuffer[DispatchThreadId.x].Position, 1.0f);
 
     float4 viewspace = mul(position, MATRIX_VP);
     

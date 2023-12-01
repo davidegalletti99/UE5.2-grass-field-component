@@ -28,7 +28,7 @@ public class ComputeShaders: ModuleRules
 			"RHI",
 			"Projects",
 			"ProceduralMeshComponent",
-			"Niagara"
+			"Grass"
 		});
 		
 		if (Target.bBuildEditor == true)

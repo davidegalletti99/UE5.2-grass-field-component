@@ -4,67 +4,86 @@
 
 #include "CoreMinimal.h"
 #include "Components/PrimitiveComponent.h"
-#include "Components/BrushComponent.h"
 #include "ProceduralMeshComponent.h"
 #include "Engine/World.h"
 
-#include "GrassShader.h"
-#include "GrassChunk.h"
 #include "Math.h"
+#include "GrassSceneProxy.h"
+#include "GrassData.h"
 
-#include "Math/PerspectiveMatrix.h"
 #include "GrassFieldComponent.generated.h"
 
-/**
- * 
- */
-UCLASS()
+
+class UMaterialInterface;
+
+UCLASS(Blueprintable, ClassGroup = Rendering, hideCategories = (Activation, Collision, Cooking, HLOD, Navigation, Object, Physics, VirtualTexture))
 class GRASS_API UGrassFieldComponent : public UPrimitiveComponent
 {
-	GENERATED_BODY()
+	GENERATED_UCLASS_BODY()
 
-public:
-	UGrassFieldComponent();
+protected:
+	/** Material applied to each instance. */
+	UPROPERTY(EditAnywhere, Category = Rendering)
+		UMaterialInterface* Material = nullptr;
 
-	UProceduralMeshComponent* mesh;
-	UProceduralMeshComponent* grassMesh;
-
-
-	UFUNCTION(CallInEditor, Category = "Grass")
-		void ChunksInit();
-
-private:
-	TArray<GrassChunk> chunks;
-
-	UPROPERTY(EditAnywhere, Category = "Grass")
-		FBox bounds = FBox(FVector(-160.0f, -160.0f, -1.0f), FVector(160.0f, 160.0f, 1.0f));
-
-	UPROPERTY(EditAnywhere, Category = "Grass")
-		int32 gridSize = 2;
-
-	UPROPERTY(EditAnywhere, Category = "Grass")
+	UPROPERTY(EditAnywhere, Category = Rendering)
 		float lambda = 10.0f;
 
-	UPROPERTY(EditAnywhere, Category = "Grass")
+	UPROPERTY(EditAnywhere, Category = Rendering)
 		float cutoffDistance = 400.0f;
 
-	UPROPERTY(EditAnywhere, Category = "Grass")
+	UPROPERTY(EditAnywhere, Category = Rendering)
 		int32 density = 10;
 
-	UPROPERTY(EditAnywhere, Category = "Grass")
+	UPROPERTY(EditAnywhere, Category = Rendering)
 		int32 displacement = 8;
 
-	UPROPERTY(EditAnywhere, Category = "Grass")
+	UPROPERTY(EditAnywhere, Category = Rendering)
 		int32 maxHeight = 5;
 
-	UPROPERTY(EditAnywhere, Category = "Grass")
+	UPROPERTY(EditAnywhere, Category = Rendering)
 		int32 minHeight = 1;
 
-	UFUNCTION(CallInEditor, Category = "Grass")
+
+	UPROPERTY(EditAnywhere, Category = Rendering)
+		FUintVector2 LodStepsRange = FUintVector2(1, 7);
+
+public:
+
+	UMaterialInterface* GetMaterial() const { return Material; }
+
+	UFUNCTION(CallInEditor, Category = Rendering)
 		void SampleGrassData();
 
-	UFUNCTION(CallInEditor, Category = "Grass")
-		void ComputeGrass();
 
-	void AddGrassData(FVector point, float height);
+	UFUNCTION(CallInEditor, Category = Rendering)
+		void EmptyGrassData();
+
+protected:
+
+	//~ Begin UActorComponent Interface
+	virtual void OnRegister() override;
+	virtual void OnUnregister() override;
+	virtual void ApplyWorldOffset(const FVector& InOffset, bool bWorldShift) override;
+	//~ End UActorComponent Interface
+
+	//~ Begin USceneComponent Interface
+	virtual bool IsVisible() const override;
+	virtual FBoxSphereBounds CalcBounds(const FTransform& LocalToWorld) const override;
+	//~ EndUSceneComponent Interface
+
+	//~ Begin UPrimitiveComponent Interface
+	virtual FPrimitiveSceneProxy* CreateSceneProxy() override;
+	virtual bool SupportsStaticLighting() const override { return true; }
+	virtual void SetMaterial(int32 ElementIndex, class UMaterialInterface* Material) override;
+	virtual UMaterialInterface* GetMaterial(int32 Index) const override { return Material; }
+	virtual void GetUsedMaterials(TArray<UMaterialInterface*>& OutMaterials, bool bGetDebugMaterials = false) const override;
+	//~ End UPrimitiveComponent Interface
+
+private:
+	TResourceArray<GrassMesh::FPackedGrassData>* GrassData;
+
+public:
+	UProceduralMeshComponent* SurfaceMesh;
 };
+
