@@ -15,33 +15,58 @@
  */
 struct GrassData
 {
-    // Position -> 4 x 3 Byte
-    // Height -> 2 Byte
-    // Offset -> 2 Byte
     float3 Position;
+    float2 Facing;
+	// float WindStrength;
+    
+    int Hash;
+    
     float Height;
-    float Offset;
+    float Width;
+    
+    // float Tilt;
+    // float Bend;
 };
 
 struct PackedGrassData
 {
     float3 Position;
-    uint HeightAndOffset;
+    uint Facing;
+	// float WindStrength;
+
+    int Hash;
+
+    uint HeightAndWidth;
+	// uint TiltAndBand;
 };
 
 struct LodGrassData
 {
     float3 Position;
+    float2 Facing;
+	// float WindStrength;
+    
+    int Hash;
     uint LodLevel;
+    
     float Height;
-    float Offset;
+    float Width;
+    
+    // float Tilt;
+    // float Bend;
 };
 
 struct PackedLodGrassData
 {
     float3 Position;
+    uint Facing;
+	// float WindStrength;
+
+    int Hash;
     uint LodLevel;
-    uint HeightAndOffset;
+
+    uint HeightAndWidth;
+	// uint TiltAndBand;
 };
 
 
@@ -52,14 +77,22 @@ PackedGrassData Pack(GrassData InData)
     // prendo i 4 bit medno significativi dall'esponente e 12 dalla mantissa
     // 0    7    f    f    f    8    0    0
     // 0000 0111 1111 1111 1111 1000 0000 0000
-    OutData.HeightAndOffset = (asuint(InData.Height) & 0x7fff8000) << 1;
+    OutData.HeightAndWidth = (asuint(InData.Height) & 0x7fff8000) << 1;
+    OutData.HeightAndWidth |= (asuint(InData.Width) & 0x7fff8000) >> 15;
     
     // prendo i 3 bit medno significativi dall'esponente e 13 dalla mantissa    
     // 0    3    f    f    f    a    0    0
     // 0000 0011 1111 1111 1111 1100 0000 0000
-    OutData.HeightAndOffset |= (asuint(InData.Offset) & 0x3fffa000) >> 14;
+    uint Signes = (asuint(InData.Facing.x) & 0x80000000);
+    Signes |= (asuint(InData.Facing.y) & 0x80000000) >> 16;
+    
+    OutData.Facing = (asuint(InData.Facing.x) & 0x3fff8000) << 1;
+    OutData.Facing |= (asuint(InData.Facing.y) & 0x3fff8000) >> 15;
+    OutData.Facing |= Signes;
 
     OutData.Position = InData.Position;
+    OutData.Hash = InData.Hash;
+    
     return OutData;
 }
 
@@ -68,8 +101,15 @@ GrassData Unpack(PackedGrassData InData)
     GrassData OutData = (GrassData) 0;
     
     OutData.Position = InData.Position;
-    OutData.Height = asfloat((InData.HeightAndOffset & 0xffff0000) >> 1);
-    OutData.Offset = asfloat((InData.HeightAndOffset & 0x0000ffff) << 14);
+    OutData.Hash = InData.Hash;
+    
+    OutData.Height = asfloat((InData.HeightAndWidth & 0xffff0000) >> 1);
+    OutData.Width = asfloat((InData.HeightAndWidth & 0x0000ffff) << 15);
+    
+    uint SignX = InData.Facing & 0x80000000;
+    uint SignY = (InData.Facing & 0x00008000) << 16;
+    OutData.Facing.x = asfloat(SignX | (InData.Facing & 0x7fff0000) >> 1);
+    OutData.Facing.y = asfloat(SignY | (InData.Facing & 0x00007fff) << 15);
     
     return OutData;
 }
@@ -79,9 +119,17 @@ LodGrassData Unpack(PackedLodGrassData InData)
     LodGrassData OutData = (LodGrassData) 0;
     
     OutData.Position = InData.Position;
+    
+    OutData.Hash = InData.Hash;
     OutData.LodLevel = InData.LodLevel;
-    OutData.Height = asfloat((InData.HeightAndOffset & 0xffff0000) >> 1);
-    OutData.Offset = asfloat((InData.HeightAndOffset & 0x0000ffff) << 14);
+    
+    OutData.Height = asfloat((InData.HeightAndWidth & 0xffff0000) >> 1);
+    OutData.Width = asfloat((InData.HeightAndWidth & 0x0000ffff) << 15);
+    
+    uint SignX = InData.Facing & 0x80000000;
+    uint SignY = (InData.Facing & 0x00008000) << 16;
+    OutData.Facing.x = asfloat(SignX | (InData.Facing & 0x7fff0000) >> 1);
+    OutData.Facing.y = asfloat(SignY | (InData.Facing & 0x00007fff) << 15);
     
     return OutData;
 }
@@ -190,99 +238,4 @@ float3 movePoint(in float3 pi, in float3 vi, in float t)
     float3 p = pi + vi * t;
     p.z -= t * t * GRAVITATIONAL_ACCELERATION / 2;
     return p;
-}
-
-//  z
-//  |
-//  |
-//  |         * *
-//  |    y  *     * pe (t = te)
-//  |   /  *    
-//  |  /  *
-//  | /  *
-//  |/   * p0 (t = 0)
-//  +-------------------------- x
-//  0
-void createGrass(
-    in RWStructuredBuffer<GrassVertex> VertexBuffer, in uint VertexCounter,
-    in RWStructuredBuffer<uint> IndexBuffer, in uint IndexCounter,
-    in LodGrassData Data, 
-    in float Lambda)
-{
-    float3 p0 = Data.Position;
-    float height = Data.Height;
-    uint LodSteps = Data.LodLevel;
-    
-    
-    float3 v0 = float3(0, 0, 1); // computeInitialVelocity(ext, height);
-    float epsilon = 0; // (snoise(p0 / 1000) - 0.5f) * Lambda;
-    float te = (v0.z - epsilon) / GRAVITATIONAL_ACCELERATION;
-    
-    float maxThickness = height * 0.02;
-    float3 normal = float3(0, 1, 0); // normalize(cross(v0, float3(v0.xy, 0)));
-    
-    uint VertexId, IndexId;
-    InterlockedAdd(VertexCounter, (LodSteps * 2 + 1), VertexId);
-    InterlockedAdd(IndexCounter, (LodSteps * 2 - 1) * 2, IndexId);
-    
-    for (uint i = 0; i < LodSteps; i++, VertexId += 2, IndexId += 6 * 2)
-    {
-        float perc = float(i) / LodSteps;
-        float t = perc * te;
-        float3 p = movePoint(p0, v0, t);
-        float thickness = quadBez(maxThickness, maxThickness * 0.85, 0, perc);
-        
-        GrassVertex p1, p2;
-        
-        // p1
-        p1.Position = p - normal * thickness;
-        p1.UV = float2(0, 0);
-        p1.Normal = float3(0, 1, 0);
-        addPoint(VertexBuffer, VertexId + 0, p1);
-        
-        // p2
-        p2.Position = p + normal * thickness;
-        p2.UV = float2(0, 0);
-        p2.Normal = float3(0, 1, 0);
-        addPoint(VertexBuffer, VertexId + 1, p1);
-        
-        
-        if (i < LodSteps - 1)
-        {
-            // t1
-            // front
-            addTri(IndexBuffer, IndexId + 0, 
-                VertexId + 0, VertexId + 1, VertexId + 3);
-            // back
-            addTri(IndexBuffer, IndexId + 3, 
-                VertexId + 0, VertexId + 3, VertexId + 1);
-                
-            // t2
-            // front
-            addTri(IndexBuffer, IndexId + 6, 
-                VertexId + 0, VertexId + 3, VertexId + 2);
-            // back
-            addTri(IndexBuffer, IndexId + 9, 
-                VertexId + 0, VertexId + 2, VertexId + 3); 
-        }
-        else
-        {
-            // last triangle
-            // front
-            addTri(IndexBuffer, IndexId + 0, 
-                VertexId + 0, VertexId + 1, VertexId + 2);
-            // back
-            addTri(IndexBuffer,IndexId + 3, 
-                VertexId + 0, VertexId + 2, VertexId + 1);
-        }
-        
-    }
-    
-    GrassVertex pe;
-    
-    // last point
-    pe.Position = movePoint(p0, v0, te);
-    pe.UV = float2(0, 0);
-    pe.Normal = float3(0, 1, 0);
-    addPoint(VertexBuffer, VertexId, pe);
 }

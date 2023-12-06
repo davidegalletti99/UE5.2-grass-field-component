@@ -84,7 +84,9 @@ void CullGrassDataCS(
         
         OutData.Position = Data.Position;
         OutData.LodLevel = computeLodSteps(uint2(0, 7), CutoffDistance, CameraPosition, OutData.Position);
-        OutData.HeightAndOffset = Data.HeightAndOffset;
+        OutData.HeightAndWidth = Data.HeightAndWidth;
+        OutData.Facing = Data.Facing;
+        OutData.Hash = Data.Hash;
         uint WriteIndex;
         InterlockedAdd(RWCounter[0], 1, WriteIndex);
         RWCulledGrassDataBuffer[WriteIndex] = OutData;
@@ -92,73 +94,97 @@ void CullGrassDataCS(
     }
 }
 
+float3 rotateZ(float angle, float3 vec)
+{
+    float3x3 rot = float3x3(    cos(angle), -sin(angle),  0,
+                                sin(angle),  cos(angle),  0,
+                                         0,           0,  1);
+    return mul(rot, vec);
+}
+
 void CreateGrassBlade(LodGrassData Data)
 {
+    
     uint LodSteps = Data.LodLevel;
     float3 p0 = Data.Position;
+    float2 facing = Data.Facing;
     float height = Data.Height;
+    float width = Data.Width;
     
-    float3 seed = rand3(p0);
-    float3 v0 = computeInitialVelocity(seed, height);
-    float epsilon = (snoise(p0 / 1000) - 0.5f) * Lambda;
-    float te = (v0.z - epsilon) / GRAVITATIONAL_ACCELERATION;
     
-    float maxThickness = height * 0.02;
-    float3 normal = normalize(cross(v0, float3(v0.xy, 0)));
+    float3 v0 = computeInitialVelocity(float3(0, 0, 1), height);
+    float te = v0.z / GRAVITATIONAL_ACCELERATION;
+    
     
     uint VertexId, IndexId;
     InterlockedAdd(RWCounter[1], LodSteps * 2 + 1, VertexId);
-    InterlockedAdd(RWIndirectArgsBuffer[0], (LodSteps * 2 - 1) * 2 * 3, IndexId);
+    InterlockedAdd(RWIndirectArgsBuffer[0], (LodSteps * 2 - 1) * 3, IndexId);
     
-    for (uint i = 0; i < LodSteps; i++, VertexId += 2, IndexId += 6 * 2)
+    float3 CameraDistanceVector = normalize(p0 - CameraPosition);
+    bool IsFront = dot(CameraDistanceVector.xy, facing) <= 0;
+    
+    float3 normal = float3(facing * (IsFront - 0.5) * 2, 0);
+    float3 orto = -normalize(cross(float3(facing, 1), float3(facing, 0)));
+
+    for (uint i = 0; i < LodSteps; i++, VertexId += 2, IndexId += 6)
     {
         float perc = float(i) / LodSteps;
         float t = perc * te;
         float3 p = movePoint(p0, v0, t);
-        float thickness = quadBez(maxThickness, maxThickness * 0.85, 0, perc);
+        float thickness = quadBez(width, width * 0.85, 0, perc);
         
         GrassVertex p1, p2;
         
+        
         // p1
-        p1.Position = p - normal * thickness;
+        p1.Position = p - orto * thickness;
         p1.UV = float2(perc, 0);
-        p1.Normal = normal;
+        p1.Normal = rotateZ(PI * (-0.3), normal);
         addPoint(RWVertexBuffer, VertexId + 0, p1);
         
         // p2
-        p2.Position = p + normal * thickness;
+        p2.Position = p + orto * thickness;
         p2.UV = float2(perc, 1);
-        p2.Normal = normal;
+        p2.Normal = rotateZ(PI * (0.3), normal);
         addPoint(RWVertexBuffer, VertexId + 1, p2);
         
         
         if (i < LodSteps - 1)
         {
-            // t1
-            // front
-            addTri(RWIndexBuffer, IndexId + 0,
-                VertexId + 0, VertexId + 1, VertexId + 3);
-            // back
-            addTri(RWIndexBuffer, IndexId + 3,
-                VertexId + 0, VertexId + 3, VertexId + 1);
-                
-            // t2
-            // front
-            addTri(RWIndexBuffer, IndexId + 6,
-                VertexId + 0, VertexId + 3, VertexId + 2);
-            // back
-            addTri(RWIndexBuffer, IndexId + 9,
-                VertexId + 0, VertexId + 2, VertexId + 3);
+            if (IsFront)
+            {
+                // t1
+                addTri(RWIndexBuffer, IndexId + 0,
+                    VertexId + 0, VertexId + 1, VertexId + 3);
+                // t2
+                addTri(RWIndexBuffer, IndexId + 3,
+                    VertexId + 0, VertexId + 3, VertexId + 2);
+            }
+            else
+            {
+                // t1
+                addTri(RWIndexBuffer, IndexId + 0,
+                    VertexId + 0, VertexId + 3, VertexId + 1);
+                // t2
+                addTri(RWIndexBuffer, IndexId + 3,
+                    VertexId + 0, VertexId + 2, VertexId + 3);
+            }
         }
         else
         {
-            // last triangle
-            // front
-            addTri(RWIndexBuffer, IndexId + 0,
+            
+            if (IsFront)
+            {
+                // last triangle
+                addTri(RWIndexBuffer, IndexId + 0,
                 VertexId + 0, VertexId + 1, VertexId + 2);
-            // back
-            addTri(RWIndexBuffer, IndexId + 3,
-                VertexId + 0, VertexId + 2, VertexId + 1);
+            }
+            else
+            {
+                // last triangle
+                addTri(RWIndexBuffer, IndexId + 0,
+                    VertexId + 0, VertexId + 2, VertexId + 1);
+            }
         }
         
     }
@@ -167,7 +193,7 @@ void CreateGrassBlade(LodGrassData Data)
     GrassVertex pe;
     pe.Position = movePoint(p0, v0, te);
     pe.UV = float2(1, 1);
-    pe.Normal = float3(0, 1, 0);
+    pe.Normal = normal;
     
     addPoint(RWVertexBuffer, VertexId, pe);
 }

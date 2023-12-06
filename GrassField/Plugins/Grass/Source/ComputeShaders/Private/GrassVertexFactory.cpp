@@ -17,22 +17,22 @@
 IMPLEMENT_GLOBAL_SHADER_PARAMETER_STRUCT(FGrassParameters, "GrassParams");
 
 
-void FGrassIndexBuffer::InitRHI()
-{
-
-	int32 IndicesNum = GrassDataNum * (MaxLodSteps * 2 + 1) * 3 * 2;
-	FRHIResourceCreateInfo CreateInfo(TEXT("FGrass.IndexBuffer"));
-	IndexBufferRHI = RHICreateVertexBuffer(IndicesNum * sizeof(int32), BUF_UnorderedAccess | BUF_DrawIndirect, CreateInfo);
-	IndexBufferUAV = RHICreateUnorderedAccessView(IndexBufferRHI, PF_R32_UINT);
-
-}
-
 void FGrassVertexBuffer::InitRHI()
 {
 	int32 VerticesNum = GrassDataNum * (MaxLodSteps * 2 + 1);
 	FRHIResourceCreateInfo CreateInfo(TEXT("FGrass.VertexBuffer"));
 	VertexBufferRHI = RHICreateVertexBuffer(VerticesNum * sizeof(GrassMesh::FGrassVertex), BUF_UnorderedAccess | BUF_DrawIndirect, CreateInfo);
 	VertexBufferUAV = RHICreateUnorderedAccessView(VertexBufferRHI, PF_R32_UINT);
+}
+
+void FGrassIndexBuffer::InitRHI()
+{
+
+	int32 IndicesNum = GrassDataNum * (MaxLodSteps * 2 - 1) * 3;
+	FRHIResourceCreateInfo CreateInfo(TEXT("FGrass.IndexBuffer"));
+	IndexBufferRHI = RHICreateVertexBuffer(IndicesNum * sizeof(int32), BUF_UnorderedAccess | BUF_DrawIndirect, CreateInfo);
+	IndexBufferUAV = RHICreateUnorderedAccessView(IndexBufferRHI, PF_R32_UINT);
+
 }
 
 FGrassVertexFactory::FGrassVertexFactory(ERHIFeatureLevel::Type InFeatureLevel, const FGrassParameters &InParams)
@@ -67,7 +67,6 @@ void FGrassVertexFactory::Init(FVertexBuffer* VertexBuffer)
 
 void FGrassVertexFactory::InitRHI()
 {
-	UE_LOG(LogTemp, Warning, TEXT("VertexFactory Init"));
 	UniformBuffer = FGrassBufferRef::CreateUniformBufferImmediate(Params, UniformBuffer_MultiFrame);
 
 	check(Streams.Num() == 0);
@@ -107,6 +106,7 @@ bool FGrassVertexFactory::ShouldCompilePermutation(const FVertexFactoryShaderPer
 void FGrassVertexFactory::ModifyCompilationEnvironment(const FVertexFactoryShaderPermutationParameters &Parameters, FShaderCompilerEnvironment &OutEnvironment)
 {
 	// TODO
+	OutEnvironment.SetDefine(TEXT("USE_INSTANCING"), USE_INSTANCING);
 }
 
 void FGrassVertexFactory::ValidateCompiledResult(
@@ -120,10 +120,12 @@ void FGrassVertexFactory::ValidateCompiledResult(
 
 void FGrassShaderParameters::Bind(const FShaderParameterMap& ParameterMap)
 {
+#if USE_INSTANCING
 	// TODO
 	InstanceBufferParameter.Bind(ParameterMap, TEXT("InstanceBuffer"));
 	LodViewOriginParameter.Bind(ParameterMap, TEXT("LodViewOrigin"));
 	// LodDistancesParameter.Bind(ParameterMap, TEXT("LodDistances"));
+#endif
 }
 
 void FGrassShaderParameters::GetElementShaderBindings(
@@ -140,11 +142,13 @@ void FGrassShaderParameters::GetElementShaderBindings(
 	FGrassVertexFactory* VertexFactory = (FGrassVertexFactory*)InVertexFactory;
 	ShaderBindings.Add(Shader->GetUniformBufferParameter<FGrassParameters>(), VertexFactory->UniformBuffer);
 
+#if USE_INSTANCING
 	FGrassUserData* UserData = (FGrassUserData*)BatchElement.UserData;
 	// TODO
 	ShaderBindings.Add(InstanceBufferParameter, UserData->InstanceBufferSRV);
 	ShaderBindings.Add(LodViewOriginParameter, UserData->LodViewOrigin);
 	// ShaderBindings.Add(LodDistancesParameter, UserData->LodDistances);
+#endif
 }
 
 

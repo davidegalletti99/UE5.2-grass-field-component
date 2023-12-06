@@ -7,16 +7,12 @@
 ATerrain::ATerrain()
 {
  	// Set this actor to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
-	PrimaryActorTick.bCanEverTick = true;
+	PrimaryActorTick.bCanEverTick = false;
 
 	meshComponent = this->CreateDefaultSubobject<UProceduralMeshComponent>(TEXT("TerrainMesh"));
 	this->AddComponent(TEXT("Terrain Mesh"), false, FTransform(), meshComponent);
 
-	grassMeshComponent = this->CreateDefaultSubobject<UProceduralMeshComponent>(TEXT("GrassMesh"));
-	this->AddComponent(TEXT("Grass Mesh"), false, FTransform(), grassMeshComponent);
-
 	grassFieldComponent = this->CreateDefaultSubobject<UGrassFieldComponent>(TEXT("GrassField"));
-	grassFieldComponent->SurfaceMesh = meshComponent;
 	this->AddComponent(TEXT("Grass Field"), false, FTransform(), grassFieldComponent);
 
 }

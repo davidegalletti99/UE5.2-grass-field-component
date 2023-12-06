@@ -17,6 +17,38 @@
 class UMaterialInterface;
 
 UCLASS(Blueprintable, ClassGroup = Rendering, hideCategories = (Activation, Collision, Cooking, HLOD, Navigation, Object, Physics, VirtualTexture))
+class UGrassMeshSection : public UObject
+{
+	GENERATED_BODY()
+
+protected:
+
+	/** Material applied to each instance. */
+	UPROPERTY(EditAnywhere, Category = Rendering)
+		UMaterialInterface* Material = nullptr;
+
+	UPROPERTY(EditAnywhere, Category = Rendering)
+		FBox Bounds = FBox();
+	
+	TArray<GrassMesh::FPackedGrassData>* GrassData = nullptr;
+
+public:
+
+
+	UGrassMeshSection(const FObjectInitializer& ObjectInitializer = FObjectInitializer::Get());
+
+	void Empty();
+
+	void AddGrassData(GrassMesh::FPackedGrassData Data);
+
+	void SetBounds(FBox InBounds)
+	{
+		Bounds = InBounds;
+	}
+
+};
+
+UCLASS(Blueprintable, ClassGroup = Rendering, hideCategories = (Activation, Collision, Cooking, HLOD, Navigation, Object, Physics, VirtualTexture))
 class GRASS_API UGrassFieldComponent : public UPrimitiveComponent
 {
 	GENERATED_UCLASS_BODY()
@@ -27,10 +59,16 @@ protected:
 		UMaterialInterface* Material = nullptr;
 
 	UPROPERTY(EditAnywhere, Category = Rendering)
-		float lambda = 10.0f;
+		uint32 Dimension = 2;
 
 	UPROPERTY(EditAnywhere, Category = Rendering)
-		float cutoffDistance = 400.0f;
+		AActor* Terrain = nullptr;
+
+	UPROPERTY(EditAnywhere, Category = Rendering)
+		float lambda = 3.0f;
+
+	UPROPERTY(EditAnywhere, Category = Rendering)
+		float cutoffDistance = 1000.0f;
 
 	UPROPERTY(EditAnywhere, Category = Rendering)
 		int32 density = 10;
@@ -39,14 +77,17 @@ protected:
 		int32 displacement = 8;
 
 	UPROPERTY(EditAnywhere, Category = Rendering)
-		int32 maxHeight = 5;
+		int32 maxHeight = 12;
 
 	UPROPERTY(EditAnywhere, Category = Rendering)
-		int32 minHeight = 1;
-
+		int32 minHeight = 7;
 
 	UPROPERTY(EditAnywhere, Category = Rendering)
 		FUintVector2 LodStepsRange = FUintVector2(1, 7);
+
+	UPROPERTY(EditAnywhere, Category = Rendering)
+		TArray<UGrassMeshSection *> Sections;
+
 
 public:
 
@@ -58,6 +99,10 @@ public:
 
 	UFUNCTION(CallInEditor, Category = Rendering)
 		void EmptyGrassData();
+
+
+	UFUNCTION(CallInEditor, Category = Rendering)
+		void InitSections();
 
 protected:
 
@@ -83,7 +128,5 @@ protected:
 private:
 	TResourceArray<GrassMesh::FPackedGrassData>* GrassData;
 
-public:
-	UProceduralMeshComponent* SurfaceMesh;
 };
 

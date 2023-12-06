@@ -3,6 +3,10 @@
 #pragma once
 #include "VectorTypes.h"
 
+#ifndef USE_INSTANCING
+	#define USE_INSTANCING 0
+#endif // USE_INSTANCING
+
 
 namespace GrassMesh {
 	struct FGrassData;
@@ -27,19 +31,31 @@ namespace GrassMesh {
 	struct COMPUTESHADERS_API FGrassData
 	{
 		FVector3f Position;
-		float Height;
-		float Offset;
+		FVector2f Facing;
+		// float WindStrength;
+		int Hash;
 
-		FGrassData(FVector3f Position, float Height, float Offset);
+		float Height;
+		float Width;
+		// float Tilt;
+		// float Bend;
+
+		FGrassData(FVector3f Position, FVector2f Facing, int Hash, float Height, float Width);
 		FGrassData(FPackedGrassData& InData);
 	};
 
 	struct COMPUTESHADERS_API FPackedGrassData
 	{
 		FVector3f Position;
-		uint32 HeightAndOffset;
+		uint32 Facing;
+		// float WindStrength;
 
-		FPackedGrassData(FVector3f Position, float Height, float Offset);
+		int Hash;
+
+		uint32 HeightAndWidth;
+		// uint32 TiltAndBand;
+
+		FPackedGrassData(FVector3f Position, FVector2f Facing, int Hash, float Height, float Width);
 		FPackedGrassData(FGrassData& InData);
 	};
 
@@ -47,22 +63,27 @@ namespace GrassMesh {
 	struct COMPUTESHADERS_API FLodGrassData
 	{
 		FVector3f Position;
-		uint32 Lod;
-		float Height;
-		float Offset;
+		FVector2f Facing;
+		// float WindStrength;
+		int Hash;
 
-		FLodGrassData(FPackedLodGrassData& InData);
-		FLodGrassData(FVector3f Position, uint32 Lod, float Height, float Offset);
+		uint32 Lod;
+
+		float Height;
+		float Width;
+		// float Tilt;
+		// float Bend;
 	};
 
 	struct COMPUTESHADERS_API FPackedLodGrassData
 	{
 		FVector3f Position;
-		uint32 Lod;
-		uint32 HeightAndOffset;
+		FVector2f Facing;
+		// float WindStrength;
+		int Hash;
 
-		FPackedLodGrassData(FVector3f Position, uint32 Lod, float Height, float Offset);
-		FPackedLodGrassData(FLodGrassData& InData);
+		uint32 HeightAndWidth;
+		// uint32 TiltAndBand;
 	};
 
 	struct COMPUTESHADERS_API FGrassInstance
@@ -83,80 +104,7 @@ namespace GrassMesh {
 	struct COMPUTESHADERS_API FPackedGrassVertex
 	{
 		FVector3f Position;
-		uint32 uv;
+		uint32 UV;
 	};
 
-
-	//// FGrassData
-	//inline FGrassData Unpack(FPackedGrassData InData)
-	//{
-	//	FGrassData OutData;
-	//	OutData.Position = InData.Position;
-	//	OutData.Height = convert<float>((InData.HeightAndOffset & 0xffff0000) >> 1);
-	//	OutData.Offset = convert<float>((InData.HeightAndOffset & 0x0000ffff) << 14);
-
-	//	return OutData;
-	//}
-
-
-	//inline FPackedGrassData Pack(FVector3f Position, float Height, float Offset)
-	//{
-	//	FPackedGrassData OutData;
-	//	// prendo i 4 bit medno significativi dall'esponente e 12 dalla mantissa
-	//	// 0    7    f    f    f    8    0    0
-	//	// 0000 0111 1111 1111 1111 1000 0000 0000
-	//	OutData.HeightAndOffset = (convert<uint32>(Height) & 0x7fff8000) << 1;
-
-	//	// prendo i 3 bit medno significativi dall'esponente e 13 dalla mantissa    
-	//	// 0    3    f    f    f    a    0    0
-	//	// 0000 0011 1111 1111 1111 1100 0000 0000
-	//	OutData.HeightAndOffset |= (convert<uint32>(Offset) & 0x3fffa000) >> 14;
-
-	//	OutData.Position = Position;
-
-	//	return OutData;
-	//}
-
-	//inline FPackedGrassData Pack(FGrassData InData)
-	//{
-	//	return Pack(InData.Position, InData.Height, InData.Offset);
-	//}
-
-
-	//// FLodGrassData
-	//inline FLodGrassData Unpack(FPackedLodGrassData InData)
-	//{
-	//	FLodGrassData OutData;
-	//	OutData.Position = InData.Position;
-	//	OutData.Lod = InData.Lod;
-	//	OutData.Height = convert<float>((InData.HeightAndOffset & 0xffff0000) >> 1);
-	//	OutData.Offset = convert<float>((InData.HeightAndOffset & 0x0000ffff) << 14);
-
-	//	return OutData;
-	//}
-
-
-	//inline FPackedLodGrassData Pack(FVector3f Position, uint32 Lod, float Height, float Offset)
-	//{
-	//	FPackedLodGrassData OutData;
-	//	// prendo i 4 bit medno significativi dall'esponente e 12 dalla mantissa
-	//	// 0    7    f    f    f    8    0    0
-	//	// 0000 0111 1111 1111 1111 1000 0000 0000
-	//	OutData.HeightAndOffset = (convert<uint32>(Height) & 0x7fff8000) << 1;
-
-	//	// prendo i 3 bit medno significativi dall'esponente e 13 dalla mantissa    
-	//	// 0    3    f    f    f    a    0    0
-	//	// 0000 0011 1111 1111 1111 1100 0000 0000
-	//	OutData.HeightAndOffset |= (convert<uint32>(Offset) & 0x3fffa000) >> 14;
-
-	//	OutData.Position = Position;
-	//	OutData.Lod = Lod;
-
-	//	return OutData;
-	//}
-
-	//inline FPackedLodGrassData Pack(FLodGrassData InData)
-	//{
-	//	return Pack(InData.Position, InData.Lod, InData.Height, InData.Offset);
-	//}
 }

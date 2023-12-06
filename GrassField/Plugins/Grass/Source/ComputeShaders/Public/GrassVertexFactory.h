@@ -12,7 +12,7 @@
 #include "VertexFactory.h"
 #include "GrassData.h"
 
-
+#if USE_INSTANCING
 /**
  * Per frame UserData to pass to the vertex shader.
  */
@@ -21,6 +21,7 @@ struct FGrassUserData : public FOneFrameResource
 	FRHIShaderResourceView *InstanceBufferSRV;
 	FVector3f LodViewOrigin;
 };
+#endif
 
 class FGrassVertexBuffer : public FVertexBuffer
 {
@@ -118,6 +119,7 @@ public:
 
 private:
 	FGrassVertexDataType Data;
+
 	FGrassParameters Params;
 	FGrassBufferRef UniformBuffer;
 
@@ -148,8 +150,10 @@ public:
 		FVertexInputStreamArray& VertexStreams) const;
 
 protected:
+#if USE_INSTANCING
 	// TODO
 	LAYOUT_FIELD(FShaderResourceParameter, InstanceBufferParameter);
 	LAYOUT_FIELD(FShaderParameter, LodViewOriginParameter);
 	// LAYOUT_FIELD(FShaderParameter, LodDistancesParameter);
+#endif
 };

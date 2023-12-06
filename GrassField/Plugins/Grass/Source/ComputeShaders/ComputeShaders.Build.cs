@@ -9,7 +9,6 @@ public class ComputeShaders: ModuleRules
 		
 		PrivateIncludePaths.AddRange(new string[] 
 		{
-			"Runtime/Renderer/Private",
 			"ComputeShaders/Private"
 		});
 		if (Target.bBuildEditor == true)

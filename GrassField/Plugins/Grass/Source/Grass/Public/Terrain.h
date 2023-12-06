@@ -29,17 +29,16 @@ class GRASS_API ATerrain : public AActor
 	UPROPERTY(EditAnywhere, Category = "Terrain")
 		int32 spacing = 10;
 
+	UFUNCTION(CallInEditor, Category = "Terrain")
+		void ComputeMesh();
+
+public:
 	UPROPERTY(EditAnywhere, Category = "Terrain")
 		UProceduralMeshComponent* meshComponent;
-
-	UPROPERTY(EditAnywhere, Category = "Terrain")
-		UProceduralMeshComponent* grassMeshComponent;
 	
 	UPROPERTY(EditAnywhere, Category = "Terrain")
 		UGrassFieldComponent* grassFieldComponent;
 
-	UFUNCTION(CallInEditor, Category = "Terrain")
-		void ComputeMesh();
 
 
 
