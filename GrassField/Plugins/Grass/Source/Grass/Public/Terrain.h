@@ -24,10 +24,14 @@ class GRASS_API ATerrain : public AActor
 		int32 height = 256;
 
 	UPROPERTY(EditAnywhere, Category = "Terrain")
-		int32 amplitude = 200;
+		float amplitude = 200;
 
 	UPROPERTY(EditAnywhere, Category = "Terrain")
-		int32 spacing = 10;
+		float spacing = 10;
+
+	
+	UPROPERTY(EditAnywhere, Category = "Terrain")
+		FVector2D scale = FVector2D(1, 1);
 
 	UFUNCTION(CallInEditor, Category = "Terrain")
 		void ComputeMesh();
@@ -51,20 +55,5 @@ public:
 	virtual void Tick(float DeltaTime) override;
 
 	ATerrain();
-
-	int32 GetWidth()
-	{
-		return width;
-	}
-
-	int32 GetHeight()
-	{
-		return height;
-	}
-
-	int32 GetAmplitude()
-	{
-		return amplitude;
-	}
 
 };

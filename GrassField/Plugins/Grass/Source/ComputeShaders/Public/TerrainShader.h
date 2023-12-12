@@ -11,8 +11,6 @@
 #include "RHICommandList.h"
 #include "RHIStaticStates.h"
 
-#include "MeshPassProcessor.h"
-#include "MeshMaterialShader.h"
 
 #include "GlobalShader.h"
 #include "ShaderParameterUtils.h"
@@ -22,16 +20,7 @@
 
 #include "RendererInterface.h"
 #include "RenderResource.h"
-#include "RenderTargetPool.h"
-#include "RenderGraphBuilder.h"
 #include "RenderGraphResources.h"
-#include "RenderGraphUtils.h"
-#include "Renderer/Private/ScenePrivate.h"
-
-#include "Runtime/Engine/Classes/Engine/TextureRenderTarget2D.h"
-#include "Kismet/BlueprintAsyncActionBase.h"
-
-#include "ComputeShaders.h"
 #include "ProceduralMeshComponent.h"
 
 #define NUM_THREADS_TerrainShader_X 32
@@ -51,18 +40,16 @@ struct COMPUTESHADERS_API FTerrainShaderDispatchParams
 	float GlobalWorldTime = 0;
 	int32 Width = 256;
 	int32 Height = 256;
-	int32 MaxAltitude = 100;
-	int32 Spacing = 10;
-
-	TArray<float> Points;
-	TArray<int32> triangles;
+	float MaxAltitude = 100;
+	float Spacing = 10;
+	FVector2D Scale = FVector2D(1, 1);
 
 
-	FTerrainShaderDispatchParams(float globalWorldTime, int32 width, int32 height, int32 maxAltitude, int32 spacing)
+	FTerrainShaderDispatchParams(float globalWorldTime, int32 width, int32 height, float maxAltitude, float spacing, FVector2D Scale)
 		: X((int)width / NUM_THREADS_TerrainShader_X), 
 		  Y((int)height / NUM_THREADS_TerrainShader_Y), 
 		  Z(1), GlobalWorldTime(globalWorldTime), 
-		  Width(width), Height(height), MaxAltitude(maxAltitude), Spacing(spacing)
+		  Width(width), Height(height), MaxAltitude(maxAltitude), Spacing(spacing), Scale(Scale)
 	{}
 };
 
@@ -77,25 +64,25 @@ public:
 
 	DECLARE_GLOBAL_SHADER(FTerrainShader);
 	SHADER_USE_PARAMETER_STRUCT(FTerrainShader, FGlobalShader);
-
-
-	class FTerrainShader_Perm_TEST : SHADER_PERMUTATION_INT("TEST", 1);
-	using FPermutationDomain = TShaderPermutationDomain<FTerrainShader_Perm_TEST>;
+	
+	using FPermutationDomain = TShaderPermutationDomain<>;
 
 	BEGIN_SHADER_PARAMETER_STRUCT(FTerrainShaderDispatchParams, COMPUTESHADERS_API)
 
 		SHADER_PARAMETER(float, GlobalWorldTime)
 		SHADER_PARAMETER(int32, Width)
 		SHADER_PARAMETER(int32, Height)
-		SHADER_PARAMETER(int32, MaxAltitude)
-		SHADER_PARAMETER(int32, Spacing)
-		SHADER_PARAMETER_RDG_BUFFER_UAV(RWBuffer<float>, Points)
-		SHADER_PARAMETER_RDG_BUFFER_UAV(RWBuffer<int32>, Triangles)
+		SHADER_PARAMETER(float, MaxAltitude)
+		SHADER_PARAMETER(float, Spacing)
+		SHADER_PARAMETER(FVector2f, Scale)
+		SHADER_PARAMETER_RDG_BUFFER_UAV(RWStructuredBuffer<FVector3f>, Points)
+		SHADER_PARAMETER_RDG_BUFFER_UAV(RWStructuredBuffer<FVector3f>, Normals)
+		SHADER_PARAMETER_RDG_BUFFER_UAV(RWStructuredBuffer<FVector3f>, Tangents)
+		SHADER_PARAMETER_RDG_BUFFER_UAV(RWStructuredBuffer<int32>, Triangles)
 
+	END_SHADER_PARAMETER_STRUCT();
 
-		END_SHADER_PARAMETER_STRUCT()
-
-		using FParameters = FTerrainShaderDispatchParams;
+	using FParameters = FTerrainShaderDispatchParams;
 
 	static bool ShouldCompilePermutation(const FGlobalShaderPermutationParameters& Parameters);
 
@@ -117,17 +104,17 @@ public:
 	static void DispatchRenderThread(
 		FRHICommandListImmediate& RHICmdList,
 		FTerrainShaderDispatchParams& Params,
-		TFunction<void(TArray<FVector>& Points, TArray<int32>& Triangles)> AsyncCallback);
+		TFunction<void(TArray<FVector>& Points, TArray<FVector>& Normals, TArray<FVector>& Tangents, TArray<int32>& Triangles)> AsyncCallback);
 
 	// Executes this shader on the render thread from the game thread via EnqueueRenderThreadCommand
 	static void DispatchGameThread(
 		FTerrainShaderDispatchParams& Params,
-		TFunction<void(TArray<FVector>& Points, TArray<int32>& Triangles)> AsyncCallback);
+		TFunction<void(TArray<FVector>& Points, TArray<FVector>& Normals, TArray<FVector>& Tangents, TArray<int32>& Triangles)> AsyncCallback);
 
 	// Dispatches this shader. Can be called from any thread
 	static void Dispatch(
 		FTerrainShaderDispatchParams& Params,
-		TFunction<void(TArray<FVector>& Points, TArray<int32>& Triangles)> AsyncCallback);
+		TFunction<void(TArray<FVector>& Points, TArray<FVector>& Normals, TArray<FVector>& Tangents, TArray<int32>& Triangles)> AsyncCallback);
 };
 
 
@@ -143,7 +130,7 @@ public:
 	TerrainShaderExecutor();
 	void Execute(float globalWorldTime, 
 		int32 width, int32 height, 
-		int32 maxAltitude, int32 spacing, 
+		float maxAltitude, float spacing, FVector2D scale,
 		UProceduralMeshComponent* meshComponent);
 
 private:
