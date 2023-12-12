@@ -3,7 +3,7 @@
 
 #include "GrassShaders.h"
 
-// Begin GrassMesh implementations
+// Begin implementations
 IMPLEMENT_GLOBAL_SHADER(GrassMesh::FInitBuffers_CS, "/Shaders/GrassCompute.usf", "InitBuffersCS", SF_Compute);
 IMPLEMENT_GLOBAL_SHADER(GrassMesh::FCullGrassData_CS, "/Shaders/GrassCompute.usf", "CullGrassDataCS", SF_Compute);
 IMPLEMENT_GLOBAL_SHADER(GrassMesh::FComputeGrassMesh_CS, "/Shaders/GrassCompute.usf", "ComputeGrassMeshCS", SF_Compute);

@@ -1,0 +1,31 @@
+#pragma once
+#include "/Engine/Public/Platform.ush"
+#include "Noise.ush"
+
+float3 GetBaseColor(const float3 InBaseColor, const int Seed : SV_InstanceID)
+{
+	const float T = rand1(Seed);
+	const float Frac = lerp(0.18f, 1.0f, T);
+	return InBaseColor * Frac;
+}
+
+float3 ComputeLightingParams(in const float Percent, inout float Specular, inout float Roughness, inout float AmbientOcclusion)
+{
+	AmbientOcclusion = Percent * Percent;
+	Specular = lerp(0, 0.3f, AmbientOcclusion);
+	Specular *= Specular;
+	Roughness = lerp(1.0f, 0.5f, AmbientOcclusion);
+	
+	return float3(Specular, Roughness, AmbientOcclusion);
+}
+
+float3 MyMainVS()
+{
+	return 0;
+}
+
+
+float3 MyMainPS()
+{
+	return 0;
+}

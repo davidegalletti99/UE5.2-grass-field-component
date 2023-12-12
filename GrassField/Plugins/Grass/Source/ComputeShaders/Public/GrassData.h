@@ -1,10 +1,15 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
 #pragma once
+
 #include "VectorTypes.h"
 
 #ifndef USE_INSTANCING
 	#define USE_INSTANCING 0
+#endif // USE_INSTANCING
+
+#ifndef USE_TANGENT_SPACE
+	#define USE_TANGENT_SPACE 0
 #endif // USE_INSTANCING
 
 
@@ -15,17 +20,17 @@ namespace GrassMesh {
 	struct FPackedLodGrassData;
 
 	template <typename OutType, typename InType>
-	inline OutType convert(InType value)
+	inline OutType convert(InType Value)
 	{
-		union converter
+		union FConverter
 		{
-			InType in;
-			OutType out;
+			InType In;
+			OutType Out;
 		};
-		converter conv{};
-		conv.in = value;
+		FConverter Conv{};
+		Conv.In = Value;
 
-		return conv.out;
+		return Conv.Out;
 	}
 
 	struct COMPUTESHADERS_API FGrassData
@@ -97,9 +102,11 @@ namespace GrassMesh {
 	{
 		FVector3f Position;
 		FVector2f UV;
-		FVector3f Normal;
+		FVector3f TangentX;
+		FVector4f TangentZ; // TangentZ.w contains sign of tangent basis determinant
+		// FPackedNormal TangentX;
+		// FPackedNormal TangentZ;
 	};
-
 
 	struct COMPUTESHADERS_API FPackedGrassVertex
 	{

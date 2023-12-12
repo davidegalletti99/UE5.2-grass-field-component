@@ -10,8 +10,13 @@
 #include "ShaderParameterStruct.h"
 #include "ShaderCompilerCore.h"
 
-namespace GrassMesh
+namespace GrassMesh // GrassShaders
 {
+
+	// ************************************************************************************************************** //
+	// ********************************************* Compute Shaders ************************************************ //
+	// ************************************************************************************************************** //
+	
 	/** Compute shader to initialize all buffers, including adding the lowest mip page(s) to the QuadBuffer. */
 	class COMPUTESHADERS_API FInitBuffers_CS : public FGlobalShader
 	{
@@ -70,6 +75,7 @@ namespace GrassMesh
 		BEGIN_SHADER_PARAMETER_STRUCT(FParameters, )
 			SHADER_PARAMETER(float, Lambda)
 			SHADER_PARAMETER(FVector3f, CameraPosition)
+			SHADER_PARAMETER(FMatrix44f, ViewMatrix)
 			SHADER_PARAMETER_RDG_BUFFER_UAV(RWStructuredBuffer<uint32>, RWCounter)
 			SHADER_PARAMETER_RDG_BUFFER_SRV(StructuredBuffer<FPackedLodGrassData>, CulledGrassDataBuffer)
 			SHADER_PARAMETER_UAV(RWStructuredBuffer<FGrassVertex>, RWVertexBuffer)
@@ -95,12 +101,11 @@ namespace GrassMesh
 
 		BEGIN_SHADER_PARAMETER_STRUCT(FParameters, )
 			SHADER_PARAMETER_UAV(RWBuffer<uint>, RWIndirectArgsBuffer)
-			END_SHADER_PARAMETER_STRUCT()
+		END_SHADER_PARAMETER_STRUCT()
 
 			static bool ShouldCompilePermutation(FGlobalShaderPermutationParameters const& Parameters)
 		{
 			return IsFeatureLevelSupported(Parameters.Platform, ERHIFeatureLevel::SM6);
 		}
 	};
-
 }

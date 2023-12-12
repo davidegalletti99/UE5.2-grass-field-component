@@ -28,7 +28,6 @@
 #include "GrassFieldComponent.h"
 #include "GrassShaders.h"
 
-
 class FGrassSceneProxy;
 class FGrassRendererExtension;
 
@@ -61,6 +60,7 @@ namespace GrassMesh
 	{
 		FVector ViewOrigin;
 		FMatrix ProjectionMatrix;
+		FMatrix ViewMatrix;
 		FMatrix ViewProjectionMatrix;
 		FConvexVolume ViewFrustum;
 		bool bViewFrozen;
@@ -82,10 +82,10 @@ namespace GrassMesh
 	{
 		FSceneView const* ViewDebug;
 		FVector3f ViewOrigin;
+		FMatrix44f ViewMatrix;
 		FMatrix44f ViewProjectionMatrix;
 		float LodBiasScale;
 		FVector4 LodDistances;
-		FVector4 Planes[5];
 	};
 
 	/** View description used for culling in the child view. */
@@ -93,9 +93,9 @@ namespace GrassMesh
 	{
 		FSceneView const* ViewDebug;
 		FVector3f ViewOrigin;
+		FMatrix44f ViewMatrix;
 		FMatrix44f ViewProjectionMatrix;
 		bool bIsMainView;
-		FVector4 Planes[5];
 	};
 
 	/** Structure to carry RDG resources. */
@@ -126,6 +126,19 @@ public:
 		TResourceArray<GrassMesh::FPackedGrassData>* GrassData,
 		FUintVector2 LodStepsRange, 
 		float Lambda, float CutOffDistance);
+
+	virtual ~FGrassSceneProxy() override
+	{
+		// TODO: adjust resource release
+		if(VertexBuffer != nullptr)
+			VertexBuffer->ReleaseResource();
+
+		if (IndexBuffer != nullptr)
+			IndexBuffer->ReleaseResource();
+
+		if (VertexFactory != nullptr)
+			VertexFactory->ReleaseResource();
+	}
 
 protected:
 	//~ Begin FPrimitiveSceneProxy Interface

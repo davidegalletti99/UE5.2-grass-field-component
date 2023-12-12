@@ -1,26 +1,26 @@
 #include "/Engine/Private/Common.ush"
-#include "GrassUtil.ush"
-#include "Noise.ush"
+#include "GrassUtils.ush"
 
 RWStructuredBuffer<uint> RWCounter;
 
 uint GrassDataSize;
 float4x4 VP_MATRIX;
+float4x4 ViewMatrix;
 float CutoffDistance;
 float3 CameraPosition;
 float Lambda;
 
 // GrassDataBuffer
-RWStructuredBuffer<PackedGrassData> RWGrassDataBuffer;
-StructuredBuffer<PackedGrassData> GrassDataBuffer;
+RWStructuredBuffer<FPackedGrassData> RWGrassDataBuffer;
+StructuredBuffer<FPackedGrassData> GrassDataBuffer;
 
 // CulledGrassDataBuffer
-RWStructuredBuffer<PackedLodGrassData> RWCulledGrassDataBuffer;
-StructuredBuffer<PackedLodGrassData> CulledGrassDataBuffer;
+RWStructuredBuffer<FPackedLodGrassData> RWCulledGrassDataBuffer;
+StructuredBuffer<FPackedLodGrassData> CulledGrassDataBuffer;
 
 // Vertex Buffers
-RWStructuredBuffer<GrassVertex> RWVertexBuffer;
-StructuredBuffer<GrassVertex> VertexBuffer;
+RWStructuredBuffer<FGrassVertex> RWVertexBuffer;
+StructuredBuffer<FGrassVertex> VertexBuffer;
 
 // IndexBuffer
 RWStructuredBuffer<uint> RWIndexBuffer;
@@ -66,27 +66,26 @@ void InitBuffersCS()
 
 [numthreads(1024, 1, 1)]
 void CullGrassDataCS(
-    uint3 DispatchThreadId : SV_DispatchThreadID,
-    uint3 GropupId : SV_GroupID)
+    uint3 DispatchThreadId : SV_DispatchThreadID)
 {
-    uint GrassIndex = DispatchThreadId.x;
+    const uint GrassIndex = DispatchThreadId.x;
     if (GrassIndex >= GrassDataSize)
         return;
     
-    PackedGrassData Data = GrassDataBuffer[GrassIndex];
+    const FPackedGrassData Data = GrassDataBuffer[GrassIndex];
     
-    bool inView = IsInViewFrustum(Data.Position, VP_MATRIX, 0.2f);
-    bool withinDistance = distance(CameraPosition.xyz, Data.Position) < CutoffDistance;
+    const bool InView = IsInViewFrustum(Data.Position, VP_MATRIX, 0.2f);
+    const bool WithinDistance = distance(CameraPosition.xyz, Data.Position) < CutoffDistance;
     
-    if (inView && withinDistance)
+    if (InView && WithinDistance)
     {
-        PackedLodGrassData OutData;
-        
+        FPackedLodGrassData OutData;
         OutData.Position = Data.Position;
-        OutData.LodLevel = computeLodSteps(uint2(0, 7), CutoffDistance, CameraPosition, OutData.Position);
+        OutData.LodLevel = ComputeLodSteps(uint2(0, 7), CutoffDistance, CameraPosition, OutData.Position);
         OutData.HeightAndWidth = Data.HeightAndWidth;
         OutData.Facing = Data.Facing;
         OutData.Hash = Data.Hash;
+        
         uint WriteIndex;
         InterlockedAdd(RWCounter[0], 1, WriteIndex);
         RWCulledGrassDataBuffer[WriteIndex] = OutData;
@@ -94,119 +93,96 @@ void CullGrassDataCS(
     }
 }
 
-float3 rotateZ(float angle, float3 vec)
+float3 RotateZ(const float Angle, const float3 Vec)
 {
-    float3x3 rot = float3x3(    cos(angle), -sin(angle),  0,
-                                sin(angle),  cos(angle),  0,
-                                         0,           0,  1);
-    return mul(rot, vec);
+    const float3x3 Rot =
+        float3x3(   cos(Angle), -sin(Angle),  0,
+                    sin(Angle),  cos(Angle),  0,
+                    0,           0,           1);
+    return mul(Rot, Vec);
 }
 
-void CreateGrassBlade(LodGrassData Data)
+void CreateGrassBlade(const FLodGrassData Data)
 {
+    const uint LodSteps = Data.LodLevel;
+    const float3 P0 = Data.Position;
+    const float2 Facing = Data.Facing;
     
-    uint LodSteps = Data.LodLevel;
-    float3 p0 = Data.Position;
-    float2 facing = Data.Facing;
-    float height = Data.Height;
-    float width = Data.Width;
+    const float Height = Data.Height;
+    const float Width = Data.Width;
     
     
-    float3 v0 = computeInitialVelocity(float3(0, 0, 1), height);
-    float te = v0.z / GRAVITATIONAL_ACCELERATION;
-    
+    const float3 V0 = ComputeInitialVelocity(float3(0, 0, 1), Height);
+    const float Te = V0.z / GRAVITATIONAL_ACCELERATION;
     
     uint VertexId, IndexId;
     InterlockedAdd(RWCounter[1], LodSteps * 2 + 1, VertexId);
     InterlockedAdd(RWIndirectArgsBuffer[0], (LodSteps * 2 - 1) * 3, IndexId);
     
-    float3 CameraDistanceVector = normalize(p0 - CameraPosition);
-    bool IsFront = dot(CameraDistanceVector.xy, facing) <= 0;
+    float3 CameraDistanceVector = normalize(P0 - CameraPosition);
+    const bool IsFront = dot(CameraDistanceVector.xy, Facing) <= 0;
     
-    float3 normal = float3(facing * (IsFront - 0.5) * 2, 0);
-    float3 orto = -normalize(cross(float3(facing, 1), float3(facing, 0)));
-
+    const float3 Normal = float3(Facing, 0) * (2 * IsFront - 1);
+    const float3 Tangent = cross(Normal, float3(0, 0, 1)); // -normalize(cross(float3(Facing, 1), float3(Facing, 0)));
+    const float Angle = PI * 0.1; 
     for (uint i = 0; i < LodSteps; i++, VertexId += 2, IndexId += 6)
     {
-        float perc = float(i) / LodSteps;
-        float t = perc * te;
-        float3 p = movePoint(p0, v0, t);
-        float thickness = quadBez(width, width * 0.85, 0, perc);
+        const float Percent = float(i) / LodSteps;
+        const float T = Percent * Te;
+        const float3 P = MovePoint(P0, V0, T);
+        const float Thickness = QUAD_BEZ(Width, Width * 0.85, 0, Percent);
         
-        GrassVertex p1, p2;
+        FGrassVertex P1, P2;
         
+        // P1
+        P1.Position = P - Tangent * Thickness;
+        P1.UV = float2(0, Percent);
+        P1.TangentX = Tangent;
+        P1.TangentZ = float4(RotateZ(Angle, Normal), 1);
+        AddPoint(RWVertexBuffer, VertexId + 0, P1);
         
-        // p1
-        p1.Position = p - orto * thickness;
-        p1.UV = float2(perc, 0);
-        p1.Normal = rotateZ(PI * (-0.3), normal);
-        addPoint(RWVertexBuffer, VertexId + 0, p1);
-        
-        // p2
-        p2.Position = p + orto * thickness;
-        p2.UV = float2(perc, 1);
-        p2.Normal = rotateZ(PI * (0.3), normal);
-        addPoint(RWVertexBuffer, VertexId + 1, p2);
+        // P2
+        P2.Position = P + Tangent * Thickness;
+        P2.UV = float2(1, Percent);
+        P2.TangentX = Tangent;
+        P2.TangentZ = float4(RotateZ(-Angle, Normal), 1);
+        AddPoint(RWVertexBuffer, VertexId + 1, P2);
         
         
         if (i < LodSteps - 1)
         {
-            if (IsFront)
-            {
                 // t1
-                addTri(RWIndexBuffer, IndexId + 0,
+                AddTri(RWIndexBuffer, IndexId + 0,
                     VertexId + 0, VertexId + 1, VertexId + 3);
                 // t2
-                addTri(RWIndexBuffer, IndexId + 3,
+                AddTri(RWIndexBuffer, IndexId + 3,
                     VertexId + 0, VertexId + 3, VertexId + 2);
-            }
-            else
-            {
-                // t1
-                addTri(RWIndexBuffer, IndexId + 0,
-                    VertexId + 0, VertexId + 3, VertexId + 1);
-                // t2
-                addTri(RWIndexBuffer, IndexId + 3,
-                    VertexId + 0, VertexId + 2, VertexId + 3);
-            }
         }
         else
         {
-            
-            if (IsFront)
-            {
                 // last triangle
-                addTri(RWIndexBuffer, IndexId + 0,
+                AddTri(RWIndexBuffer, IndexId + 0,
                 VertexId + 0, VertexId + 1, VertexId + 2);
-            }
-            else
-            {
-                // last triangle
-                addTri(RWIndexBuffer, IndexId + 0,
-                    VertexId + 0, VertexId + 2, VertexId + 1);
-            }
         }
-        
     }
     
     // last point
-    GrassVertex pe;
-    pe.Position = movePoint(p0, v0, te);
-    pe.UV = float2(1, 1);
-    pe.Normal = normal;
-    
-    addPoint(RWVertexBuffer, VertexId, pe);
+    FGrassVertex Pe;
+    Pe.Position = MovePoint(P0, V0, Te);
+    Pe.UV = float2(1, 1);
+    Pe.TangentX = Tangent;
+    Pe.TangentZ = float4(Normal, 1);
+    AddPoint(RWVertexBuffer, VertexId, Pe);
 }
 
 [numthreads(1024, 1, 1)]
 void ComputeGrassMeshCS(
-    uint3 DispatchThreadId : SV_DispatchThreadID,
-    uint3 GropupId : SV_GroupID)
+    uint3 DispatchThreadId : SV_DispatchThreadID)
 {
-    uint GrassIndex = DispatchThreadId.x;
+    const uint GrassIndex = DispatchThreadId.x;
     if (GrassIndex >= RWCounter[0])
         return;
 
-    LodGrassData Data = Unpack(CulledGrassDataBuffer[GrassIndex]);
+    const FLodGrassData Data = Unpack(CulledGrassDataBuffer[GrassIndex]);
     CreateGrassBlade(Data);
 }

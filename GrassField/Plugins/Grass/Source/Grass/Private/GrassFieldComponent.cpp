@@ -148,25 +148,27 @@ void UGrassFieldComponent::SampleGrassData()
 
 
 	UProceduralMeshComponent* SurfaceMesh = Terrain->GetComponentByClass<UProceduralMeshComponent>();
-	FProcMeshSection* section = SurfaceMesh->GetProcMeshSection(0);
-	for (auto& vertex : section->ProcVertexBuffer)
+	FProcMeshSection* Section = SurfaceMesh->GetProcMeshSection(0);
+	for (auto& Vertex : Section->ProcVertexBuffer)
 	{
-		FVector p = vertex.Position + SurfaceMesh->GetActorPositionForRenderer();
+		FVector p = Vertex.Position + SurfaceMesh->GetActorPositionForRenderer();
 		for (float i = 0; i < density; i++)
 		{
-			FVector offset = (FMath::VRand() - 0.5) * displacement;
-			FVector facing = (FMath::VRand() - 0.5);
-			FVector start = p + FVector(offset.X, offset.Y, 10);
+			FVector Offset = (FMath::VRand() - 0.5) * displacement;
+			FVector Facing = (FMath::VRand() - 0.5);
+			FVector Start = p + FVector(Offset.X, Offset.Y, 10);
 
-			FVector end = p + FVector(offset.X, offset.Y, -10);
-			FHitResult hit;
+			FVector End = p + FVector(Offset.X, Offset.Y, -10);
 
-			if (GetWorld()->LineTraceSingleByChannel(hit, start, end, SurfaceMesh->GetCollisionObjectType()))
+			if (FHitResult Hit; GetWorld()->LineTraceSingleByChannel(Hit, Start, End, SurfaceMesh->GetCollisionObjectType()))
 			{
-				float height = FMath::Lerp(minHeight, maxHeight, FMath::SRand());
-				float width = FMath::Lerp(minHeight, maxHeight, FMath::SRand()) * 0.02;
+				if (FMath::Abs(Vertex.Normal.Dot(FVector(0, 0, 1))) <= 0.8)
+					continue;
+				
+				const float Height = FMath::Lerp(minHeight, maxHeight, FMath::SRand());
+				const float Width = FMath::Lerp(minHeight, maxHeight, FMath::SRand()) * 0.02;
 
-				GrassData->Add(GrassMesh::FPackedGrassData(FVector3f(hit.ImpactPoint), FVector2f(FVector3f(facing)), 0, height, width));
+				GrassData->Add(GrassMesh::FPackedGrassData(FVector3f(Hit.ImpactPoint), FVector2f(FVector3f(Facing)), 0, Height, Width));
 			}
 		}
 	}

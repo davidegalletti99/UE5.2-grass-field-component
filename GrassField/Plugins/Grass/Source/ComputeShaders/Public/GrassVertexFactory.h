@@ -61,14 +61,16 @@ public:
 struct FGrassVertexDataType
 {
 	FVertexStreamComponent PositionComponent;
-	FVertexStreamComponent NormalComponent;
 	FVertexStreamComponent UVComponent;
-
-	void operator=(FGrassVertexDataType& InData)
+	FVertexStreamComponent TangentBasisComponents[2];
+	
+	void operator=(const FGrassVertexDataType& InData)
 	{
 		PositionComponent = InData.PositionComponent;
 		UVComponent = InData.UVComponent;
-		NormalComponent = InData.NormalComponent;
+		TangentBasisComponents[0] = InData.TangentBasisComponents[0];
+		TangentBasisComponents[1] = InData.TangentBasisComponents[1];
+
 	}
 
 };

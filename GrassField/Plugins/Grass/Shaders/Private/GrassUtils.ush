@@ -1,0 +1,238 @@
+#pragma once
+// #include "Noise.ush"
+
+#define GRAVITATIONAL_ACCELERATION 9.81
+#define PI 3.14159265359
+#define SQ_2_PI 2.50662827463
+
+// Calcola la curva di Bézier quadratica
+#define QUAD_BEZ(p0, p1, p2, t) (lerp(p0, lerp(p1, p2, t), t))
+#define GAUSSIAN_MAP(m, s, x) (exp(-(x - m)*(x - m) / (2 * s * s)) / (s * SQ_2_PI))
+
+/** 
+ * Struct per la generazione dei fili d'erba
+ */
+struct FGrassData
+{
+    float3 Position;
+    float2 Facing;
+	// float WindStrength;
+    
+    int Hash;
+    
+    float Height;
+    float Width;
+    
+    // float Tilt;
+    // float Bend;
+};
+
+struct FPackedGrassData
+{
+    float3 Position;
+    uint Facing;
+	// float WindStrength;
+
+    int Hash;
+
+    uint HeightAndWidth;
+	// uint TiltAndBand;
+};
+
+struct FLodGrassData
+{
+    float3 Position;
+    float2 Facing;
+	// float WindStrength;
+    
+    int Hash;
+    uint LodLevel;
+    
+    float Height;
+    float Width;
+    
+    // float Tilt;
+    // float Bend;
+};
+
+struct FPackedLodGrassData
+{
+    float3 Position;
+    uint Facing;
+	// float WindStrength;
+
+    int Hash;
+    uint LodLevel;
+
+    uint HeightAndWidth;
+	// uint TiltAndBand;
+};
+
+
+FPackedGrassData Pack(const FGrassData InData)
+{
+    FPackedGrassData OutData = (FPackedGrassData) 0;
+    
+    // prendo i 4 bit medno significativi dall'esponente e 12 dalla mantissa
+    // 0    7    f    f    f    8    0    0
+    // 0000 0111 1111 1111 1111 1000 0000 0000
+    OutData.HeightAndWidth = (asuint(InData.Height) & 0x7fff8000) << 1;
+    OutData.HeightAndWidth |= (asuint(InData.Width) & 0x7fff8000) >> 15;
+    
+    // prendo i 3 bit medno significativi dall'esponente e 13 dalla mantissa    
+    // 0    3    f    f    f    a    0    0
+    // 0000 0011 1111 1111 1111 1100 0000 0000
+    uint Signes = (asuint(InData.Facing.x) & 0x80000000);
+    Signes |= (asuint(InData.Facing.y) & 0x80000000) >> 16;
+    
+    OutData.Facing = (asuint(InData.Facing.x) & 0x3fff8000) << 1;
+    OutData.Facing |= (asuint(InData.Facing.y) & 0x3fff8000) >> 15;
+    OutData.Facing |= Signes;
+
+    OutData.Position = InData.Position;
+    OutData.Hash = InData.Hash;
+    
+    return OutData;
+}
+
+FGrassData Unpack(const FPackedGrassData InData)
+{
+    FGrassData OutData = (FGrassData) 0;
+    
+    OutData.Position = InData.Position;
+    OutData.Hash = InData.Hash;
+    
+    OutData.Height = asfloat((InData.HeightAndWidth & 0xffff0000) >> 1);
+    OutData.Width = asfloat((InData.HeightAndWidth & 0x0000ffff) << 15);
+    
+    const uint SignX = InData.Facing & 0x80000000;
+    const uint SignY = (InData.Facing & 0x00008000) << 16;
+    OutData.Facing.x = asfloat(SignX | (InData.Facing & 0x7fff0000) >> 1);
+    OutData.Facing.y = asfloat(SignY | (InData.Facing & 0x00007fff) << 15);
+    
+    return OutData;
+}
+
+FLodGrassData Unpack(const FPackedLodGrassData InData)
+{
+    FLodGrassData OutData = (FLodGrassData) 0;
+    
+    OutData.Position = InData.Position;
+    OutData.Hash = InData.Hash;
+    OutData.LodLevel = InData.LodLevel;
+    
+    OutData.Height = asfloat((InData.HeightAndWidth & 0xffff0000) >> 1);
+    OutData.Width = asfloat((InData.HeightAndWidth & 0x0000ffff) << 15);
+    
+    const uint SignX = InData.Facing & 0x80000000;
+    const uint SignY = (InData.Facing & 0x00008000) << 16;
+    OutData.Facing.x = asfloat(SignX | (InData.Facing & 0x7fff0000) >> 1);
+    OutData.Facing.y = asfloat(SignY | (InData.Facing & 0x00007fff) << 15);
+    
+    return OutData;
+}
+struct FGrassVertex
+{
+    float3 Position;
+    float2 UV;
+    
+    float3 TangentX;
+    float4 TangentZ; // TangentZ.w contains sign of tangent basis determinant
+};
+
+struct FGrassInstance
+{
+    float3 Position;
+    float Offset; // Animation Offset
+};
+
+/** Return false if the AABB is completely outside one of the planes. */
+bool PlaneTestAABB(in float4 InPlanes[5], in float3 InCenter, in float3 InExtent)
+{
+    bool bPlaneTest = true;
+	
+	[unroll]
+    for (uint PlaneIndex = 0; PlaneIndex < 5; ++PlaneIndex)
+    {
+        float3 PlaneSigns;
+        PlaneSigns.x = InPlanes[PlaneIndex].x >= 0.f ? 1.f : -1.f;
+        PlaneSigns.y = InPlanes[PlaneIndex].y >= 0.f ? 1.f : -1.f;
+        PlaneSigns.z = InPlanes[PlaneIndex].z >= 0.f ? 1.f : -1.f;
+
+        bool bInsidePlane = dot(InPlanes[PlaneIndex], float4(InCenter + InExtent * PlaneSigns, 1.0f)) > 0.f;
+        bPlaneTest = bPlaneTest && bInsidePlane;
+    }
+
+    return bPlaneTest;
+}
+
+bool IsInViewFrustum(in float3 position, in float4x4 ViewProjectionMatrix, in float margin)
+{
+    const float4 position4 = float4(position, 1.0f);
+    const float4 viewspace = mul(position4, ViewProjectionMatrix);
+    
+    float3 clipspace = viewspace.xyz;
+    clipspace /= viewspace.w;
+
+    clipspace.xy = clipspace.xy / 2.0f + 0.5f;
+    
+    return clipspace.x >= 0.0f - margin && clipspace.x <= 1.0f + margin
+        && clipspace.y >= 0.0f - margin && clipspace.y <= 1.0f + margin
+        && clipspace.z >= 0.0f && clipspace.z <= 1.0f;
+}
+
+/**
+ * Aggiunge il vertice @data al buffer @VertexBuffer 
+ * in posizione @vertexPos
+ */ 
+void AddPoint(
+    in RWStructuredBuffer<FGrassVertex> VertexBuffer,
+    in const uint VertexPos, in const FGrassVertex Data)
+{
+    VertexBuffer[VertexPos] = Data;
+}
+
+/**
+ * Aggiunge il triangolo definiito dagli indici @idx1, @idx2 e @idx3 
+ * al buffer @IndexBuffer partendo dalla posizione @indexPos
+ */
+void AddTri(
+    in RWStructuredBuffer<uint> IndexBuffer, 
+    in const uint IndexPos, in const uint Idx1, in const uint Idx2, in uint Idx3)
+{
+    IndexBuffer[IndexPos + 0] = Idx1;
+    IndexBuffer[IndexPos + 1] = Idx2;
+    IndexBuffer[IndexPos + 2] = Idx3;
+}
+
+//  z
+//  |
+//  |
+//  |         * *         -
+//  |    y  *     *       |
+//  |   /  *              | height
+//  |  /  *               |
+//  | /  *                |
+//  |/   *                -
+//  +-------------------------- x
+//  0
+float3 ComputeInitialVelocity(in const float3 Seed, in const float Height)
+{
+    float3 V0 = Seed;
+    V0.xy += sign(V0.xy) * 1.5;
+    V0.z = sqrt(2 * GRAVITATIONAL_ACCELERATION * Height);
+    return V0;
+}
+
+uint ComputeLodSteps(const uint2 MinMaxLod, const float CutoffDistance, const float3 CameraPosition, const float3 PointPosition)
+{
+    const float Dist = distance(CameraPosition, PointPosition);
+    return ceil(lerp(MinMaxLod.x, MinMaxLod.y, GAUSSIAN_MAP(0, 0.4f, 2 * Dist / CutoffDistance)));
+}
+
+float3 MovePoint(const float3 Pi, const float3 Vi, const float T)
+{
+    float3 P = Pi + Vi * T;
+    P.z -= T * T * GRAVITATIONAL_ACCELERATION / 2;
+    return P;
+}

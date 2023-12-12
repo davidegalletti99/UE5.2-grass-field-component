@@ -1,51 +1,121 @@
 #include "/Engine/Public/Platform.ush"
 #include "Noise.ush"
 
+
 float GlobalWorldTime;
 int Width;
 int Height;
-int MaxAltitude;
-int Spacing;
+float MaxAltitude;
+float Spacing;
+float2 Scale;
 
-RWBuffer<float> Points;
-RWBuffer<int> Triangles;
+RWStructuredBuffer<float3> Points;
+RWStructuredBuffer<float3> Normals;
+RWStructuredBuffer<float3> Tangents;
+RWStructuredBuffer<int> Triangles;
+
+static groupshared float2 Seed;
+
+static groupshared float3x3 WorldToNoise;
+static groupshared float4x4 NoiseToWorld;
+
+void SetTransforms(const float2 InScale, const float InAmplitude, const float InSpacing, const int InWidth, const int InHeight)
+{
+	WorldToNoise = float3x3(
+		float3(InScale.x / InWidth, 0, - InScale.x / 2),
+		float3(0, InScale.y / InHeight, - InScale.y / 2),
+		float3(0, 0, 1));
+	
+	NoiseToWorld = float4x4(
+		float4(InWidth * InSpacing / InScale.x, 0, 0, 0),
+		float4(0, InHeight * InSpacing / InScale.y, 0, 0),
+		float4(0, 0, InAmplitude, - InAmplitude / 2),
+		float4(0, 0, 0, 1));;
+}
+
+void SetSeed(const float Time)
+{
+	Seed = rand2(Time);
+}
+
+float H(float2 P)
+{
+	P += Seed;
+	const float Noise = fbm(P);
+	return pow(Noise, 2.0f);
+}
+
+float H(const float X, const float Y)
+{
+	return H(float2(X, Y));
+}
+
+float3 ComputePosition(const uint2 Position)
+{
+	const float2 Loc = mul(WorldToNoise, float3(Position, 1.0)).xy;
+	
+	const float Height = H(Loc);
+	const float4 NoiseLoc = float4(Loc, Height, 1.0);
+	
+	return mul(NoiseToWorld, NoiseLoc).xyz;
+}
+
+// compute the normal based on the HeightMap function H
+float3x3 ComputeTangentSpace(const uint2 Position)
+{
+	const float Delta = 0.01f;
+
+	const float2 Right = mul(WorldToNoise, float3(Position + uint2(1, 0) * Delta, 1.0f)).xy;
+	const float2 Left = mul(WorldToNoise, float3(Position - uint2(1, 0) * Delta, 1.0f)).xy;
+	const float2 Up = mul(WorldToNoise,  float3(Position + uint2(0, 1) * Delta, 1.0f)).xy;
+	const float2 Down = mul(WorldToNoise, float3(Position - uint2(0, 1) * Delta, 1.0f)).xy;
+	
+	const float3 Tangent = float3(Right, H(Right))  - float3(Left, H(Left));
+	const float3 Binormal = float3(Up, H(Up)) - float3(Down, H(Down));
+	const float3 Normal = normalize(cross(Tangent, Binormal));
+	
+	return float3x3(Tangent, Binormal, Normal);
+}
+
 
 [numthreads(THREADS_X, THREADS_Y, THREADS_Z)]
 void Main(
-	uint3 DispatchThreadId : SV_DispatchThreadID,
-	uint3 GroupThreadId : SV_GroupThreadID,
-	uint3 GroupId : SV_GroupID,
-	uint GroupIndex : SV_GroupIndex)
+	const uint3 DispatchThreadId : SV_DispatchThreadID,
+	const uint Id : SV_GroupIndex)
 {
-    float seed = rand2(GlobalWorldTime);
-    int3 threadIdx = (int3) DispatchThreadId;
-    
-    int idx = threadIdx.y * Width + threadIdx.x;
-    int pointIdx = idx * 3;
-    
-    float2 XYCoord = threadIdx.xy - float2(Width, Height) / 2.0f;
-    XYCoord = XYCoord * Spacing;
-    
-    Points[pointIdx + 0] = XYCoord.x;
-    Points[pointIdx + 1] = XYCoord.y;
-    Points[pointIdx + 2] = (snoise(threadIdx.xy / float2(Width, Height) + seed) - 0.5) * MaxAltitude;
-	
-    if (threadIdx.x < Width - 1 && threadIdx.y < Height - 1)
-    {
-        int triangleIdx = (idx - threadIdx.y) * 2 * 3;
-		//	p1       p2
-		//	 *-------*
-		//	 |     / |
-		//	 |   /   |
-		//	 | /     |
-		//	 *-------*
-		//	p3       p4
-        Triangles[triangleIdx + 0] = idx;                   // p1
-        Triangles[triangleIdx + 1] = idx + Width;           // p3
-        Triangles[triangleIdx + 2] = idx + 1;               // p2
+	if (DispatchThreadId.x >= Width || DispatchThreadId.y >= Height)
+		return;
 
-        Triangles[triangleIdx + 3] = idx + 1;               // p2
-        Triangles[triangleIdx + 4] = idx + Width;           // p3
-        Triangles[triangleIdx + 5] = idx + Width + 1;       // p4
-    }
+	if (Id == 0)
+	{
+		SetSeed(GlobalWorldTime);
+		SetTransforms(Scale, MaxAltitude, Spacing, Width, Height);
+	}
+	GroupMemoryBarrierWithGroupSync();
+	
+    const int Idx = DispatchThreadId.y * Width + DispatchThreadId.x;
+	
+	const float3x3 TangentSpace = ComputeTangentSpace(DispatchThreadId.xy);
+	Points[Idx] = ComputePosition(DispatchThreadId.xy);
+	Normals[Idx] = TangentSpace[2];
+	Tangents[Idx] = TangentSpace[0];
+	
+    if (DispatchThreadId.x >= Width - 1 || DispatchThreadId.y >= Height - 1)
+    	return;
+	
+    const int TriangleIdx = (Idx - (int) DispatchThreadId.y) * 3 * 2;
+	//	p1       p2
+	//	 *-------*
+	//	 |     / |
+	//	 |   /   |
+	//	 | /     |
+	//	 *-------*
+	//	p3       p4
+    Triangles[TriangleIdx + 0] = Idx;                   // p1
+    Triangles[TriangleIdx + 1] = Idx + Width;           // p3
+    Triangles[TriangleIdx + 2] = Idx + 1;               // p2
+
+    Triangles[TriangleIdx + 3] = Idx + 1;               // p2
+    Triangles[TriangleIdx + 4] = Idx + Width;           // p3
+    Triangles[TriangleIdx + 5] = Idx + Width + 1;       // p4
 }
