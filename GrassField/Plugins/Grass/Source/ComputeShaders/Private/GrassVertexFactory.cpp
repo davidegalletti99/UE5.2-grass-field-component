@@ -35,25 +35,30 @@ void FGrassIndexBuffer::InitRHI()
 
 }
 
-FGrassVertexFactory::FGrassVertexFactory(ERHIFeatureLevel::Type InFeatureLevel, const FGrassParameters &InParams)
-		: FVertexFactory(InFeatureLevel), Params(InParams)
+FGrassVertexFactory::FGrassVertexFactory(const ERHIFeatureLevel::Type InFeatureLevel)
+		: FVertexFactory(InFeatureLevel)
 {
+	// TODO: Sistemare per poter usare i parametri
+	FGrassParameters UniformParams;
+	Params = UniformParams;
 }
 
 FGrassVertexFactory::~FGrassVertexFactory()
 {
 }
 
-
 void FGrassVertexFactory::SetData(FGrassVertexDataType& InData)
 {
 	Data = InData;
-	UpdateRHI();
+
+	if (IsInitialized())
+		UpdateRHI();
+	else
+		InitResource();
 }
 
 void FGrassVertexFactory::Init(FVertexBuffer* VertexBuffer)
 {
-
 	ENQUEUE_RENDER_COMMAND(InitGrassVertexFactory)([VertexBuffer, this](FRHICommandListImmediate& RHICmdListImmediate)
 		{
 			// Initialize the vertex factory's stream components.

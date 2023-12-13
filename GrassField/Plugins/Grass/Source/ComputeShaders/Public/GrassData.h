@@ -48,7 +48,7 @@ namespace GrassMesh {
 		FGrassData(FVector3f Position, FVector2f Facing, int Hash, float Height, float Width);
 		FGrassData(FPackedGrassData& InData);
 	};
-
+	
 	struct COMPUTESHADERS_API FPackedGrassData
 	{
 		FVector3f Position;

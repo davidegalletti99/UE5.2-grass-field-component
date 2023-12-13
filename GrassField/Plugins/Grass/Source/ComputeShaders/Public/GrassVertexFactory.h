@@ -89,9 +89,9 @@ class FGrassVertexFactory : public FVertexFactory
 	DECLARE_VERTEX_FACTORY_TYPE(FGrassVertexFactory);
 
 public:
-	FGrassVertexFactory(ERHIFeatureLevel::Type InFeatureLevel, const FGrassParameters &InParams);
+	explicit FGrassVertexFactory(const ERHIFeatureLevel::Type InFeatureLevel);
 
-	~FGrassVertexFactory();
+	virtual ~FGrassVertexFactory() override;
 
 
 	void Init(FVertexBuffer* VertexBuffer);

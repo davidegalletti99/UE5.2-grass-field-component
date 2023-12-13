@@ -15,37 +15,55 @@
 
 
 class UMaterialInterface;
+class UGrassFieldComponent;
+class UGrassMeshSection;
 
 UCLASS(Blueprintable, ClassGroup = Rendering, hideCategories = (Activation, Collision, Cooking, HLOD, Navigation, Object, Physics, VirtualTexture))
 class UGrassMeshSection : public UObject
 {
 	GENERATED_BODY()
-
 protected:
 
-	/** Material applied to each instance. */
-	UPROPERTY(EditAnywhere, Category = Rendering)
-		UMaterialInterface* Material = nullptr;
-
-	UPROPERTY(EditAnywhere, Category = Rendering)
+	UPROPERTY(VisibleAnywhere, Category = Rendering)
 		FBox Bounds = FBox();
 	
-	TArray<GrassMesh::FPackedGrassData>* GrassData = nullptr;
+	UPROPERTY(VisibleAnywhere, Category = Rendering)
+		mutable uint32 DataNum = 0;
+	
+	TResourceArray<GrassMesh::FPackedGrassData> GrassData = nullptr;
+
+	class UGrassFieldComponent* Owner = nullptr;
 
 public:
+	explicit UGrassMeshSection(const FObjectInitializer& ObjectInitializer = FObjectInitializer::Get());
 
-
-	UGrassMeshSection(const FObjectInitializer& ObjectInitializer = FObjectInitializer::Get());
-
+	bool AddGrassData(const GrassMesh::FPackedGrassData& Data);
 	void Empty();
+	
+	TResourceArray<GrassMesh::FPackedGrassData>& GetGrassData()
+	{
+		return GrassData;
+	}
 
-	void AddGrassData(GrassMesh::FPackedGrassData Data);
+	class UGrassFieldComponent* GetOwner() const
+	{
+		return Owner;
+	}
 
-	void SetBounds(FBox InBounds)
+	FBox GetBounds() const
+	{
+		return Bounds;
+	}
+	
+	void SetBounds(const FBox& InBounds)
 	{
 		Bounds = InBounds;
 	}
 
+	void SetOwner(UGrassFieldComponent* InOwner)
+	{
+		Owner = InOwner;
+	}
 };
 
 UCLASS(Blueprintable, ClassGroup = Rendering, hideCategories = (Activation, Collision, Cooking, HLOD, Navigation, Object, Physics, VirtualTexture))
@@ -65,22 +83,22 @@ protected:
 		AActor* Terrain = nullptr;
 
 	UPROPERTY(EditAnywhere, Category = Rendering)
-		float lambda = 3.0f;
+		float Lambda = 3.0f;
 
 	UPROPERTY(EditAnywhere, Category = Rendering)
-		float cutoffDistance = 1000.0f;
+		float CutoffDistance = 1000.0f;
 
 	UPROPERTY(EditAnywhere, Category = Rendering)
-		int32 density = 10;
+		int32 Density = 10;
 
 	UPROPERTY(EditAnywhere, Category = Rendering)
-		int32 displacement = 8;
+		int32 Displacement = 8;
 
 	UPROPERTY(EditAnywhere, Category = Rendering)
-		int32 maxHeight = 12;
+		int32 MaxHeight = 12;
 
 	UPROPERTY(EditAnywhere, Category = Rendering)
-		int32 minHeight = 7;
+		int32 MinHeight = 7;
 
 	UPROPERTY(EditAnywhere, Category = Rendering)
 		FUintVector2 LodStepsRange = FUintVector2(1, 7);
@@ -91,8 +109,6 @@ protected:
 
 public:
 
-	UMaterialInterface* GetMaterial() const { return Material; }
-
 	UFUNCTION(CallInEditor, Category = Rendering)
 		void SampleGrassData();
 
@@ -100,9 +116,20 @@ public:
 	UFUNCTION(CallInEditor, Category = Rendering)
 		void EmptyGrassData();
 
+	
+	UFUNCTION(CallInEditor, Category = Rendering)
+		void UpdateRenderThread();
+
 
 	UFUNCTION(CallInEditor, Category = Rendering)
 		void InitSections();
+
+	
+	UMaterialInterface* GetMaterial() const { return Material; }
+
+	float GetCutOffDistance() const { return CutoffDistance; }
+	FUintVector2 GetLodStepsRange() const { return LodStepsRange; }
+	TArray<UGrassMeshSection *>& GetMeshSections() { return Sections; }
 
 protected:
 
@@ -124,9 +151,6 @@ protected:
 	virtual UMaterialInterface* GetMaterial(int32 Index) const override { return Material; }
 	virtual void GetUsedMaterials(TArray<UMaterialInterface*>& OutMaterials, bool bGetDebugMaterials = false) const override;
 	//~ End UPrimitiveComponent Interface
-
-private:
-	TResourceArray<GrassMesh::FPackedGrassData>* GrassData;
 
 };
 

@@ -6,20 +6,25 @@
 UGrassMeshSection::UGrassMeshSection(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
 {
-	GrassData = new TArray<GrassMesh::FPackedGrassData>();
+	GrassData = TResourceArray<GrassMesh::FPackedGrassData>();
 }
 
-void UGrassMeshSection::AddGrassData(GrassMesh::FPackedGrassData Data)
+bool UGrassMeshSection::AddGrassData(const GrassMesh::FPackedGrassData& Data)
 {
-	bool result = FMath::PointBoxIntersection(FVector(Data.Position), Bounds);
+	const bool Result = FMath::PointBoxIntersection(FVector(Data.Position), Bounds);
 
-	if (result)
-		GrassData->Add(Data);
+	if (Result)
+	{
+		GrassData.Add(Data);
+		DataNum++;
+	}
+	return Result;
 }
 
 void UGrassMeshSection::Empty()
 {
-	GrassData->Empty();
+	GrassData.Empty();
+	DataNum = 0;
 }
 
 UGrassFieldComponent::UGrassFieldComponent(const FObjectInitializer& ObjectInitializer)
@@ -35,7 +40,6 @@ UGrassFieldComponent::UGrassFieldComponent(const FObjectInitializer& ObjectIniti
 	bEnableAutoLODGeneration = false;
 #endif
 	Mobility = EComponentMobility::Static;
-	GrassData = new TResourceArray<GrassMesh::FPackedGrassData>();
 	Sections = TArray<UGrassMeshSection *>();
 }
 
@@ -73,8 +77,8 @@ FBoxSphereBounds UGrassFieldComponent::CalcBounds(const FTransform& LocalToWorld
 
 FPrimitiveSceneProxy* UGrassFieldComponent::CreateSceneProxy()
 {
-	FGrassSceneProxy* proxy = new FGrassSceneProxy(this, GrassData, LodStepsRange, lambda, cutoffDistance);
-	return proxy;
+	FGrassSceneProxy* Proxy = new FGrassSceneProxy(this);
+	return Proxy;
 }
 
 void UGrassFieldComponent::SetMaterial(int32 InElementIndex, UMaterialInterface* InMaterial)
@@ -96,45 +100,53 @@ void UGrassFieldComponent::GetUsedMaterials(TArray<UMaterialInterface*>& OutMate
 
 void UGrassFieldComponent::EmptyGrassData()
 {
-	GrassData->Empty();
+	for(const auto& Section : Sections)
+		Section->Empty();
+	
+	MarkRenderStateDirty();
+}
+
+void UGrassFieldComponent::UpdateRenderThread()
+{
+	MarkRenderStateDirty();
 }
 
 void UGrassFieldComponent::InitSections()
 {
-
 	if (Terrain == nullptr)
 		return;
 
 	Sections.Empty();
 
-	UProceduralMeshComponent* SurfaceMesh = Terrain->GetComponentByClass<UProceduralMeshComponent>();
-	FBox LocalBounds = SurfaceMesh->GetLocalBounds().GetBox();
+	const UProceduralMeshComponent* SurfaceMesh = Terrain->GetComponentByClass<UProceduralMeshComponent>();
+	const FBox LocalBounds = SurfaceMesh->GetLocalBounds().GetBox();
 
-	FVector BoundsSize = LocalBounds.GetSize();
-	FVector Center = LocalBounds.GetCenter();
+	const FVector BoundsSize = LocalBounds.GetSize();
+	const FVector Center = LocalBounds.GetCenter();
 
-	double stepX = BoundsSize.X / Dimension;
-	double stepY = BoundsSize.Y / Dimension;
+	const double StepX = BoundsSize.X / Dimension;
+	const double StepY = BoundsSize.Y / Dimension;
 
-	double worldOffX = Center.X - BoundsSize.X / 2;
-	double worldOffY = Center.Y - BoundsSize.Y / 2;
+	const double WorldOffX = Center.X - BoundsSize.X / 2;
+	const double WorldOffY = Center.Y - BoundsSize.Y / 2;
 
-	FVector pMin, pMax;
-	pMin.Z = Center.Z - BoundsSize.Z / 2;
-	pMax.Z = Center.Z + BoundsSize.Z / 2;
+	FVector PMin, PMax;
+	PMin.Z = Center.Z - BoundsSize.Z / 2;
+	PMax.Z = Center.Z + BoundsSize.Z / 2;
 
 	for (uint32 i = 0; i < Dimension; i++)
 	{
-		pMin.X = stepX * i + worldOffX;
-		pMax.X = stepX * (i + 1) + worldOffX;
+		PMin.X = StepX * i + WorldOffX;
+		PMax.X = StepX * (i + 1) + WorldOffX;
 		for (uint32 j = 0; j < Dimension; j++)
 		{
-			pMin.Y = stepY * j + worldOffY;
-			pMax.Y = stepY * (j + 1) + worldOffY;
+			PMin.Y = StepY * j + WorldOffY;
+			PMax.Y = StepY * (j + 1) + WorldOffY;
 
-			UGrassMeshSection* section = NewObject<UGrassMeshSection>();
-			section->SetBounds(FBox(pMin, pMax));
-			Sections.Add(section);
+			UGrassMeshSection* Section = NewObject<UGrassMeshSection>();
+			Section->SetBounds(FBox(PMin, PMax));
+			Section->SetOwner(this);
+			Sections.Add(Section);
 		}
 	}
 
@@ -144,20 +156,20 @@ void UGrassFieldComponent::SampleGrassData()
 {
 	if (Terrain == nullptr)
 		return;
-	GrassData->Empty();
-
+	for (const auto& Section : Sections)
+		Section->Empty();
 
 	UProceduralMeshComponent* SurfaceMesh = Terrain->GetComponentByClass<UProceduralMeshComponent>();
-	FProcMeshSection* Section = SurfaceMesh->GetProcMeshSection(0);
-	for (auto& Vertex : Section->ProcVertexBuffer)
+	FProcMeshSection* MeshSection = SurfaceMesh->GetProcMeshSection(0);
+	for (auto& Vertex : MeshSection->ProcVertexBuffer)
 	{
 		FVector p = Vertex.Position + SurfaceMesh->GetActorPositionForRenderer();
-		for (float i = 0; i < density; i++)
+		for (float i = 0; i < Density; i++)
 		{
-			FVector Offset = (FMath::VRand() - 0.5) * displacement;
+			FVector Offset = (FMath::VRand() - 0.5) * Displacement;
 			FVector Facing = (FMath::VRand() - 0.5);
+			
 			FVector Start = p + FVector(Offset.X, Offset.Y, 10);
-
 			FVector End = p + FVector(Offset.X, Offset.Y, -10);
 
 			if (FHitResult Hit; GetWorld()->LineTraceSingleByChannel(Hit, Start, End, SurfaceMesh->GetCollisionObjectType()))
@@ -165,12 +177,21 @@ void UGrassFieldComponent::SampleGrassData()
 				if (FMath::Abs(Vertex.Normal.Dot(FVector(0, 0, 1))) <= 0.8)
 					continue;
 				
-				const float Height = FMath::Lerp(minHeight, maxHeight, FMath::SRand());
-				const float Width = FMath::Lerp(minHeight, maxHeight, FMath::SRand()) * 0.02;
-
-				GrassData->Add(GrassMesh::FPackedGrassData(FVector3f(Hit.ImpactPoint), FVector2f(FVector3f(Facing)), 0, Height, Width));
+				const float Height = FMath::Lerp(MinHeight, MaxHeight, FMath::SRand());
+				const float Width = FMath::Lerp(MinHeight, MaxHeight, FMath::SRand()) * 0.02;
+				
+				GrassMesh::FPackedGrassData GrassPoint
+				{
+					FVector3f(Hit.ImpactPoint),
+					FVector2f(Facing.X, Facing.Y),
+					0,
+					Height,
+					Width
+				};
+				for (auto& Section : Sections)
+					if(Section->AddGrassData(GrassPoint))
+						break;
 			}
 		}
 	}
-	MarkRenderStateDirty();
 }

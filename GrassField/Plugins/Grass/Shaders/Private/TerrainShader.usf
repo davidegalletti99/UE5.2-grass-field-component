@@ -15,7 +15,6 @@ RWStructuredBuffer<float3> Tangents;
 RWStructuredBuffer<int> Triangles;
 
 static groupshared float2 Seed;
-
 static groupshared float3x3 WorldToNoise;
 static groupshared float4x4 NoiseToWorld;
 
@@ -29,20 +28,21 @@ void SetTransforms(const float2 InScale, const float InAmplitude, const float In
 	NoiseToWorld = float4x4(
 		float4(InWidth * InSpacing / InScale.x, 0, 0, 0),
 		float4(0, InHeight * InSpacing / InScale.y, 0, 0),
-		float4(0, 0, InAmplitude, - InAmplitude / 2),
-		float4(0, 0, 0, 1));;
+		float4(0, 0, InAmplitude, 0),
+		float4(0, 0, 0, 1));
 }
 
 void SetSeed(const float Time)
 {
-	Seed = rand2(Time);
+	
+	Seed = rand2(mul(WorldToNoise, float3(Time, Time, 1)).xy);
 }
 
 float H(float2 P)
 {
 	P += Seed;
 	const float Noise = fbm(P);
-	return pow(Noise, 2.0f);
+	return Noise - 0.5f;
 }
 
 float H(const float X, const float Y)
@@ -69,12 +69,17 @@ float3x3 ComputeTangentSpace(const uint2 Position)
 	const float2 Left = mul(WorldToNoise, float3(Position - uint2(1, 0) * Delta, 1.0f)).xy;
 	const float2 Up = mul(WorldToNoise,  float3(Position + uint2(0, 1) * Delta, 1.0f)).xy;
 	const float2 Down = mul(WorldToNoise, float3(Position - uint2(0, 1) * Delta, 1.0f)).xy;
+
+	const float3 WorldRight = mul(NoiseToWorld, float4(Right, H(Right), 1.0f)).xyz;
+	const float3 WorldLeft = mul(NoiseToWorld, float4(Left, H(Left), 1.0f)).xyz;
+	const float3 WorldUp = mul(NoiseToWorld, float4(Up, H(Up), 1.0f)).xyz;
+	const float3 WorldDown = mul(NoiseToWorld, float4(Down, H(Down), 1.0f)).xyz;
 	
-	const float3 Tangent = float3(Right, H(Right))  - float3(Left, H(Left));
-	const float3 Binormal = float3(Up, H(Up)) - float3(Down, H(Down));
-	const float3 Normal = normalize(cross(Tangent, Binormal));
+	const float3 Tangent = normalize(WorldRight  - WorldLeft);
+	const float3 Bitangent = normalize(WorldUp - WorldDown);
+	const float3 Normal = cross(Tangent, Bitangent);
 	
-	return float3x3(Tangent, Binormal, Normal);
+	return float3x3(Tangent, Bitangent, Normal);
 }
 
 
@@ -88,8 +93,8 @@ void Main(
 
 	if (Id == 0)
 	{
-		SetSeed(GlobalWorldTime);
 		SetTransforms(Scale, MaxAltitude, Spacing, Width, Height);
+		SetSeed(GlobalWorldTime);
 	}
 	GroupMemoryBarrierWithGroupSync();
 	

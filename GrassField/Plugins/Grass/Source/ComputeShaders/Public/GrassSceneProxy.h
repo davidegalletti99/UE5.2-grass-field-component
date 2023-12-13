@@ -29,13 +29,14 @@
 #include "GrassShaders.h"
 
 class FGrassSceneProxy;
+class FGrassSectionProxy;
 class FGrassRendererExtension;
 
 namespace GrassMesh
 {
 	/* Keep indirect args offsets in sync with ISM.usf. */
-	static const int32 IndirectArgsByteOffset_FinalCull = 0;
-	static const int32 IndirectArgsByteSize = 4 * sizeof(uint32);
+	static constexpr int32 IndirectArgsByteOffset_FinalCull = 0;
+	static constexpr int32 IndirectArgsByteSize = 4 * sizeof(uint32);
 
 	/** Buffers filled by GPU culling. */
 	struct COMPUTESHADERS_API FPersistentBuffers
@@ -55,7 +56,7 @@ namespace GrassMesh
 		FUnorderedAccessViewRHIRef IndirectArgsBufferUAV;
 	};
 
-	/** View matrices that can be frozen in freezerendering mode. */
+	/** View matrices that can be frozen in FreezeRendering mode. */
 	struct COMPUTESHADERS_API FViewData
 	{
 		FVector ViewOrigin;
@@ -69,6 +70,7 @@ namespace GrassMesh
 
 	struct COMPUTESHADERS_API FProxyDesc
 	{
+		bool IsValid = false;
 		TResourceArray<GrassMesh::FPackedGrassData>* GrassData;
 		FUintVector2 LodStepsRange;
 		float Lambda;
@@ -80,6 +82,7 @@ namespace GrassMesh
 	/** View description used for LOD calculation in the main view. */
 	struct COMPUTESHADERS_API FMainViewDesc
 	{
+		bool IsValid = false;
 		FSceneView const* ViewDebug;
 		FVector3f ViewOrigin;
 		FMatrix44f ViewMatrix;
@@ -91,6 +94,7 @@ namespace GrassMesh
 	/** View description used for culling in the child view. */
 	struct COMPUTESHADERS_API FChildViewDesc
 	{
+		bool IsValid = false;
 		FSceneView const* ViewDebug;
 		FVector3f ViewOrigin;
 		FMatrix44f ViewMatrix;
@@ -117,27 +121,49 @@ namespace GrassMesh
 
 const static FName NAME_Grass(TEXT("Grass"));
 
+class COMPUTESHADERS_API FGrassSectionProxy
+{
+public:
+	explicit FGrassSectionProxy(const ERHIFeatureLevel::Type FeatureLevel);
+	~FGrassSectionProxy()
+	{
+		if(VertexBuffer.IsInitialized())
+			VertexBuffer.ReleaseResource();
+
+		if (IndexBuffer.IsInitialized())
+			IndexBuffer.ReleaseResource();
+		
+		if (VertexFactory.IsInitialized())
+			VertexFactory.ReleaseResource();
+	}
+
+	static SIZE_T GetTypeHash()
+	{
+		static size_t UniquePointer;
+		return reinterpret_cast<size_t>(&UniquePointer);
+	}
+	
+	void InitRHI();
+
+public:
+	TResourceArray<GrassMesh::FPackedGrassData> GrassData;
+	FBox Bounds;
+	FUintVector2 LodStepsRange;
+	float CutoffDistance;
+	
+	FGrassVertexBuffer VertexBuffer;
+	FGrassIndexBuffer IndexBuffer;
+	FGrassVertexFactory VertexFactory;
+};
+
 class COMPUTESHADERS_API FGrassSceneProxy final : public FPrimitiveSceneProxy
 {
 public:
-	FGrassSceneProxy(class UGrassFieldComponent* InComponent);
-
-	FGrassSceneProxy(class UGrassFieldComponent* InComponent, 
-		TResourceArray<GrassMesh::FPackedGrassData>* GrassData,
-		FUintVector2 LodStepsRange, 
-		float Lambda, float CutOffDistance);
+	explicit FGrassSceneProxy(class UGrassFieldComponent* InComponent);
 
 	virtual ~FGrassSceneProxy() override
 	{
-		// TODO: adjust resource release
-		if(VertexBuffer != nullptr)
-			VertexBuffer->ReleaseResource();
-
-		if (IndexBuffer != nullptr)
-			IndexBuffer->ReleaseResource();
-
-		if (VertexFactory != nullptr)
-			VertexFactory->ReleaseResource();
+		Sections.Empty();
 	}
 
 protected:
@@ -153,25 +179,19 @@ protected:
 	virtual FPrimitiveViewRelevance GetViewRelevance(const FSceneView *View) const override;
 	virtual void GetDynamicMeshElements(const TArray<const FSceneView *> &Views, const FSceneViewFamily &ViewFamily, uint32 VisibilityMap, FMeshElementCollector &Collector) const override;
 	//~ End FPrimitiveSceneProxy Interface
-
+	
+	
 private:
 	void BuildOcclusionVolumes(TArrayView<FVector2D> const &InMinMaxData, FIntPoint const &InMinMaxSize, TArrayView<int32> const &InMinMaxMips, int32 InNumLods);
 
 public:
 	bool bHiddenInEditor;
 	bool bCallbackRegistered;
-
+	
 	class FMaterialRenderProxy *Material;
 	FMaterialRelevance MaterialRelevance;
 
-	TResourceArray<GrassMesh::FPackedGrassData>* GrassData;
-	FUintVector2 LodStepsRange = FUintVector2(1, 7);
-	float Lambda = 1;
-	float CutoffDistance = 1000;
-
-	FGrassVertexFactory* VertexFactory;
-	FGrassVertexBuffer* VertexBuffer = nullptr;
-	FGrassIndexBuffer* IndexBuffer = nullptr;
+	TArray<FGrassSectionProxy*> Sections;
 };
 
 //  Notes: Looks like GetMeshShaderMap is returning nullptr during the DepthPass
@@ -185,11 +205,11 @@ public:
 	{
 	}
 
-	virtual ~FGrassRendererExtension()
+	virtual ~FGrassRendererExtension() override
 	{
 	}
 
-	bool IsInFrame() { return bInFrame; }
+	bool IsInFrame() const { return bInFrame; }
 
 	/** Call once to register this extension. */
 	void RegisterExtension();
@@ -199,7 +219,7 @@ public:
 	 *  the work to fill the buffers to the queue.
 	 */
 	GrassMesh::FPersistentBuffers& AddWork(
-		const FGrassSceneProxy* InProxy,
+		FGrassSectionProxy* InSection,
 		const FSceneView* InMainView,
 		const FSceneView* InCullView);
 
@@ -229,11 +249,11 @@ private:
 	/** Current frame time stamp. */
 	uint32 DiscardId;
 
-	/** Arrary of unique scene proxies to render this frame. */
-	TArray<const FGrassSceneProxy*> SceneProxies;
-	/** Arrary of unique main views to render this frame. */
+	/** Array of unique scene proxies to render this frame. */
+	TArray<FGrassSectionProxy*> SceneProxies;
+	/** Array of unique main views to render this frame. */
 	TArray<const FSceneView*> MainViews;
-	/** Arrary of unique culling views to render this frame. */
+	/** Array of unique culling views to render this frame. */
 	TArray<const FSceneView*> CullViews;
 
 	/** Key for each buffer we need to generate. */
@@ -251,7 +271,7 @@ private:
 	/** Sort predicate for FWorkDesc. When rendering we want to batch work by proxy, then by main view. */
 	struct FWorkDescSort
 	{
-		uint32 SortKey(const FWorkDesc& WorkDesc) const
+		static uint32 SortKey(const FWorkDesc& WorkDesc)
 		{
 			return (WorkDesc.ProxyIndex << 24) | (WorkDesc.MainViewIndex << 16) | (WorkDesc.CullViewIndex << 8) | WorkDesc.BufferIndex;
 		}
