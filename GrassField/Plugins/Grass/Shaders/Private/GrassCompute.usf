@@ -5,10 +5,8 @@ RWStructuredBuffer<uint> RWCounter;
 
 uint GrassDataSize;
 float4x4 VP_MATRIX;
-float4x4 ViewMatrix;
 float CutoffDistance;
 float3 CameraPosition;
-float Lambda;
 
 // GrassDataBuffer
 RWStructuredBuffer<FPackedGrassData> RWGrassDataBuffer;

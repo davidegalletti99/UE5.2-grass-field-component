@@ -32,8 +32,6 @@ protected:
 	
 	TResourceArray<GrassMesh::FPackedGrassData> GrassData = nullptr;
 
-	class UGrassFieldComponent* Owner = nullptr;
-
 public:
 	explicit UGrassMeshSection(const FObjectInitializer& ObjectInitializer = FObjectInitializer::Get());
 
@@ -45,11 +43,6 @@ public:
 		return GrassData;
 	}
 
-	class UGrassFieldComponent* GetOwner() const
-	{
-		return Owner;
-	}
-
 	FBox GetBounds() const
 	{
 		return Bounds;
@@ -58,11 +51,6 @@ public:
 	void SetBounds(const FBox& InBounds)
 	{
 		Bounds = InBounds;
-	}
-
-	void SetOwner(UGrassFieldComponent* InOwner)
-	{
-		Owner = InOwner;
 	}
 };
 

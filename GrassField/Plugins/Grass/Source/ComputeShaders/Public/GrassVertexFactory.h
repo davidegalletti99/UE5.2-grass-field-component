@@ -94,7 +94,7 @@ public:
 	virtual ~FGrassVertexFactory() override;
 
 
-	void Init(FVertexBuffer* VertexBuffer);
+	void InitData(FVertexBuffer* VertexBuffer);
 
 	virtual void InitRHI() override;
 	virtual void ReleaseRHI() override;

@@ -41,6 +41,7 @@ namespace GrassMesh
 	/** Buffers filled by GPU culling. */
 	struct COMPUTESHADERS_API FPersistentBuffers
 	{
+		FGrassSectionProxy* SectionProxy = nullptr;
 		FBufferRHIRef GrassDataBuffer;
 		FShaderResourceViewRHIRef GrassDataBufferSRV;
 
@@ -73,7 +74,6 @@ namespace GrassMesh
 		bool IsValid = false;
 		TResourceArray<GrassMesh::FPackedGrassData>* GrassData;
 		FUintVector2 LodStepsRange;
-		float Lambda;
 		float CutOffDistance;
 		FGrassVertexBuffer* VertexBuffer;
 		FGrassIndexBuffer* IndexBuffer;
@@ -142,8 +142,6 @@ public:
 		static size_t UniquePointer;
 		return reinterpret_cast<size_t>(&UniquePointer);
 	}
-	
-	void InitRHI();
 
 public:
 	TResourceArray<GrassMesh::FPackedGrassData> GrassData;

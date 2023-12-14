@@ -73,7 +73,6 @@ namespace GrassMesh // GrassShaders
 		using FPermutationDomain = TShaderPermutationDomain<FReuseCullDim>;
 
 		BEGIN_SHADER_PARAMETER_STRUCT(FParameters, )
-			SHADER_PARAMETER(float, Lambda)
 			SHADER_PARAMETER(FVector3f, CameraPosition)
 			SHADER_PARAMETER(FMatrix44f, ViewMatrix)
 			SHADER_PARAMETER_RDG_BUFFER_UAV(RWStructuredBuffer<uint32>, RWCounter)

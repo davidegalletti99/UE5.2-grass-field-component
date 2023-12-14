@@ -3,6 +3,8 @@
 
 #include "GrassFieldComponent.h"
 
+#include "Chaos/ChaosDebugDraw.h"
+
 UGrassMeshSection::UGrassMeshSection(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
 {
@@ -117,22 +119,22 @@ void UGrassFieldComponent::InitSections()
 		return;
 
 	Sections.Empty();
-
-	const UProceduralMeshComponent* SurfaceMesh = Terrain->GetComponentByClass<UProceduralMeshComponent>();
-	const FBox LocalBounds = SurfaceMesh->GetLocalBounds().GetBox();
+	const FBox LocalBounds = Bounds.GetBox();
 
 	const FVector BoundsSize = LocalBounds.GetSize();
 	const FVector Center = LocalBounds.GetCenter();
+	const FVector Extent = LocalBounds.GetExtent();
 
+	DrawDebugBox(GetWorld(), Center, Extent, FColor::Red, false, 10, 0, 10);
 	const double StepX = BoundsSize.X / Dimension;
 	const double StepY = BoundsSize.Y / Dimension;
 
-	const double WorldOffX = Center.X - BoundsSize.X / 2;
-	const double WorldOffY = Center.Y - BoundsSize.Y / 2;
+	const double WorldOffX = Center.X - Extent.X;
+	const double WorldOffY = Center.Y - Extent.Y;
 
 	FVector PMin, PMax;
-	PMin.Z = Center.Z - BoundsSize.Z / 2;
-	PMax.Z = Center.Z + BoundsSize.Z / 2;
+	PMin.Z = Center.Z - Extent.Z;
+	PMax.Z = Center.Z + Extent.Z;
 
 	for (uint32 i = 0; i < Dimension; i++)
 	{
@@ -144,8 +146,9 @@ void UGrassFieldComponent::InitSections()
 			PMax.Y = StepY * (j + 1) + WorldOffY;
 
 			UGrassMeshSection* Section = NewObject<UGrassMeshSection>();
-			Section->SetBounds(FBox(PMin, PMax));
-			Section->SetOwner(this);
+			FBox Box = FBox(PMin, PMax);
+			DrawDebugBox(GetWorld(), Box.GetCenter(), Box.GetExtent(), FColor::Red, false, 10, 0, 10);
+			Section->SetBounds(Box);
 			Sections.Add(Section);
 		}
 	}

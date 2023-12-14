@@ -57,7 +57,7 @@ void FGrassVertexFactory::SetData(FGrassVertexDataType& InData)
 		InitResource();
 }
 
-void FGrassVertexFactory::Init(FVertexBuffer* VertexBuffer)
+void FGrassVertexFactory::InitData(FVertexBuffer* VertexBuffer)
 {
 	ENQUEUE_RENDER_COMMAND(InitGrassVertexFactory)([VertexBuffer, this](FRHICommandListImmediate& RHICmdListImmediate)
 		{
