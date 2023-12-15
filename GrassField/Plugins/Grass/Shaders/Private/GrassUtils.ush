@@ -4,11 +4,51 @@
 #define GRAVITATIONAL_ACCELERATION 9.81
 #define PI 3.14159265359
 #define SQ_2_PI 2.50662827463
+#define FORWARD_VECTOR float3(0, 1, 0)
 
 // Calcola la curva di Bézier quadratica
 #define QUAD_BEZ(p0, p1, p2, t) (lerp(p0, lerp(p1, p2, t), t))
 #define CUBIC_BEZ(p0, p1, p2, p3, t) (lerp(QUAD_BEZ(p0, p1, p2, t), QUAD_BEZ(p1, p2, p3, t), t))
 #define GAUSSIAN_MAP(m, s, x) (exp(-(x - m)*(x - m) / (2 * s * s)) / (s * SQ_2_PI))
+
+
+#define IDENTITY_MATRIX_4X4 float4x4( \
+        float4(1, 0, 0, 0), \
+        float4(0, 1, 0, 0), \
+        float4(0, 0, 1, 0), \
+        float4(0, 0, 0, 1))
+
+#define ROTATION_MATRIX_Z_3X3(angle) float3x3( \
+        float3(cos(angle), -sin(angle), 0), \
+        float3(sin(angle), cos(angle),  0), \
+        float3(         0,          0,  1))
+
+#define ROTATION_MATRIX_Z_4X4(angle) float4x4( \
+        float4(cos(angle), -sin(angle), 0, 0), \
+        float4(sin(angle),  cos(angle), 0, 0), \
+        float4(         0,           0, 1, 0), \
+        float4(         0,           0, 0, 1))
+
+
+#define SKEW_SYMMETRIC_CROSS_PRODUCT_MATRIX_4X4(vec) float4x4( \
+        float4(    0, -vec.z,  vec.y, 0), \
+        float4(vec.z,      0, -vec.x, 0), \
+        float4(vec.y,  vec.x,      0, 0), \
+        float4(    0,      0,      0, 0))
+
+#define TRANSLATION_MATRIX_4X4(vec) float4x4( \
+        float4(1, 0, 0, vec.x), \
+        float4(0, 1, 0, vec.y), \
+        float4(0, 0, 1, vec.z), \
+        float4(0, 0, 0,      1))
+
+#define SCALE_MATRIX_4X4(vec) float4x4( \
+        float4(vec.x,      0,      0, 0), \
+        float4(     0, vec.y,      0, 0), \
+        float4(     0,      0, vec.z, 0), \
+        float4(     0,      0,      0, 1))
+    
+
 
 /** 
  * Struct per la generazione dei fili d'erba
@@ -143,9 +183,162 @@ struct FGrassVertex
 
 struct FGrassInstance
 {
-    float3 Position;
-    float Offset; // Animation Offset
+    float3 Origin;
+    float Width;
+    float Height;
+    float2 Facing;
 };
+
+uint ComputeVertexBufferSize(const uint NumLod)
+{
+    // Sum(i : 0 -> NumLod) (( i + 1 ) * 2 + 1)
+    return (NumLod + 3) * (NumLod + 1);
+}
+uint ComputeIndexBufferSize(const uint NumLod)
+{
+    // Sum(i : 0 -> NumLod) ( i * 2 + 1) * 6
+    return (NumLod + 1) * (NumLod + 1) * 2 * 3;
+}
+
+uint ComputeVertexBufferOffset(const uint NumLod)
+{
+    return NumLod * (NumLod + 2);
+}
+
+uint ComputeIndexBufferOffset(const uint NumLod)
+{
+    return (NumLod * NumLod) * 2 * 3;
+}
+
+float3 RotateZ(const float Angle, const float3 Vec)
+{
+    const float3x3 Rot = ROTATION_MATRIX_Z_3X3(Angle);
+    return mul(Rot, Vec);
+}
+
+float4x4 ComputeA2BRotationMatrix(float3 A, float3 B)
+{
+    const float Sine = length(cross(A, B));
+    const float Cosine = dot(A, B);
+
+    const float4x4 SkewMat = SKEW_SYMMETRIC_CROSS_PRODUCT_MATRIX_4X4(A);
+    const float4x4 IdentityMat = IDENTITY_MATRIX_4X4;
+    
+    return (IdentityMat + SkewMat + mul(SkewMat, SkewMat) * (1 - Cosine) / (Sine * Sine));
+}
+
+float4x4 ComputeTransformRotationMatrix(FGrassInstance InstanceData)
+{
+    // float CosAngle = dot(Facing, FORWARD_VECTOR.xy);
+    // float SinAngle =  sqrt(1 - CosAngle * CosAngle);
+    //
+    // float4x4 RotationMatrix = float4x4(
+    //         float4(CosAngle, -SinAngle, 0, 0),
+    //         float4(SinAngle,  CosAngle, 0, 0),
+    //         float4(       0,         0, 1, 0),
+    //         float4(       0,         0, 0, 1)
+    // );
+    return ComputeA2BRotationMatrix(FORWARD_VECTOR, float3(InstanceData.Facing, 0));
+}
+
+float4x4 ComputeTransformMatrixNoScale(FGrassInstance InstanceData)
+{
+    const float4x4 RotationMatrix = ComputeRotationNoOffsetMatrix(InstanceData);
+    const float4x4 TranslationMatrix = TRANSLATION_MATRIX_4X4(InstanceData.Origin);
+    
+    return mul(TranslationMatrix, RotationMatrix);
+}
+
+float4x4 ComputeTransformMatrix(FGrassInstance InstanceData)
+{
+    const float4x4 NoScaleTransform = ComputeTransformMatrixNoScale(InstanceData);
+    const float4x4 ScaleMatrix = SCALE_MATRIX_4X4(float3(InstanceData.Width, InstanceData.Width, InstanceData.Height));
+    
+    return mul(NoScaleTransform, ScaleMatrix);
+}
+
+
+void CreateGrassModels(
+    in const RWStructuredBuffer<FGrassVertex> VertexBuffer,
+    in const RWStructuredBuffer<uint> IndexBuffer,
+    uint2 LodRange)
+{
+    const float MaxHeight = 1.0f;
+    const float MaxWidth = 1.0f;
+    
+    const float3 InitialPosition = float3(0, 0, 0);
+    const float3 FinalPosition = float3(0, 0, 1) * MaxHeight;
+    const float2 Facing = FORWARD_VECTOR.xy;
+    
+    
+    const float3 Normal = float3(Facing, 0);
+    const float3 Tangent = cross(Normal, float3(0, 0, 1));
+    const float Angle = PI * 0.1;
+    
+    uint VertexIndex = 0, PrimitiveIndex = 0;
+    for (uint LodSteps = LodRange.x; LodSteps < LodRange.y; LodSteps++)
+    {
+        for (uint i = 0; i < LodSteps; i++, VertexIndex += 2, PrimitiveIndex += 6)
+        {
+            const float Percentage = float(i) / float(LodSteps);
+            const float CurrentFactor = QUAD_BEZ(1, 1 * 0.85, 0, Percentage) / 2;
+            const float3 CurrentPosition = QUAD_BEZ(InitialPosition, FinalPosition * 0.85, FinalPosition, Percentage);
+            
+            const float CurrentHalfWidth = CurrentFactor * MaxWidth;
+            
+            FGrassVertex P1, P2;
+            
+            P1.Position = CurrentPosition + Tangent * CurrentHalfWidth;
+            P1.UV = float2(0.5 - CurrentFactor, Percentage);
+            P1.TangentZ = float4(RotateZ(Angle, Normal), 1);
+            P1.TangentX = cross(P1.TangentZ.xyz, float3(0, 0, 1));
+            AddPoint(VertexBuffer, VertexIndex + 0, P1);
+
+            P2.Position = CurrentPosition - Tangent * CurrentHalfWidth;
+            P2.UV = float2(0.5 + CurrentFactor, Percentage);
+            P2.TangentZ = float4(RotateZ(-Angle, Normal), 1);
+            P2.TangentX = cross(P2.TangentZ.xyz, float3(0, 0, 1));
+            AddPoint(VertexBuffer, VertexIndex + 1, P2);
+
+            
+            if (i < LodSteps - 1)
+            {
+                // t1
+                AddTri(IndexBuffer, PrimitiveIndex + 0,
+                    VertexIndex + 0, VertexIndex + 1, VertexIndex + 3);
+                // t2
+                AddTri(IndexBuffer, PrimitiveIndex + 3,
+                    VertexIndex + 0, VertexIndex + 3, VertexIndex + 2);
+            }
+            else
+            {
+                // last triangle
+                AddTri(IndexBuffer, PrimitiveIndex + 0,
+                VertexIndex + 0, VertexIndex + 1, VertexIndex + 2);
+            }
+        }
+        
+        // last point
+        FGrassVertex Pe;
+        Pe.Position = FinalPosition;
+        Pe.UV = float2(0.5, 1);
+        Pe.TangentX = Tangent;
+        Pe.TangentZ = float4(Normal, 1);
+        AddPoint(VertexBuffer, VertexIndex, Pe);
+    }
+}
+
+void ComputeFrustumPlanes(
+        const float4x4 ViewProjectionMatrix,
+        inout float4 Planes[6])
+{
+    Planes[0] = ViewProjectionMatrix[3] + ViewProjectionMatrix[0];
+    Planes[1] = ViewProjectionMatrix[3] - ViewProjectionMatrix[0];
+    Planes[2] = ViewProjectionMatrix[3] + ViewProjectionMatrix[1];
+    Planes[3] = ViewProjectionMatrix[3] - ViewProjectionMatrix[1];
+    Planes[4] = ViewProjectionMatrix[3] + ViewProjectionMatrix[2];
+    Planes[5] = ViewProjectionMatrix[3] - ViewProjectionMatrix[2];
+}
 
 /** Return false if the AABB is completely outside one of the planes. */
 bool PlaneTestAABB(in float4 InPlanes[5], in float3 InCenter, in float3 InExtent)
@@ -236,73 +429,4 @@ float3 MovePoint(const float3 Pi, const float3 Vi, const float T)
     float3 P = Pi + Vi * T;
     P.z -= T * T * GRAVITATIONAL_ACCELERATION / 2;
     return P;
-}
-
-void CreateGrassModels(
-    in const RWStructuredBuffer<FGrassVertex> VertexBuffer,
-    in const RWStructuredBuffer<uint> IndexBuffer,
-    uint2 LodRange)
-{
-    const float MaxHeight = 1.0f;
-    const float MaxWidth = 1.0f;
-    
-    const float3 InitialPosition = float3(0, 0, 0);
-    const float3 FinalPosition = float3(0, 0, 1) * MaxHeight;
-    const float2 Facing = float2(0, -1);
-    
-    
-    const float3 Normal = float3(Facing, 0);
-    const float Angle = PI * 0.1;
-    
-    uint VertexIndex = 0, PrimitiveIndex = 0;
-    for (uint LodSteps = LodRange.x; LodSteps < LodRange.y; LodSteps++)
-    {
-        for (uint i = 0; i < LodSteps; i++, VertexIndex += 2, PrimitiveIndex += 6)
-        {
-            const float Percentage = float(i) / float(LodSteps);
-            const float CurrentFactor = QUAD_BEZ(1, 1 * 0.85, 0, Percentage) / 2;
-            const float3 CurrentPosition = QUAD_BEZ(InitialPosition, FinalPosition * 0.85, FinalPosition, Percentage);
-            
-            const float CurrentHalfWidth = CurrentFactor * MaxWidth;
-            
-            FGrassVertex P1, P2;
-            
-            P1.Position = CurrentPosition + CurrentTangent * CurrentHalfWidth;
-            P1.UV = float2(0.5 - CurrentFactor, Percentage);
-            P1.TangentZ = float4(RotateZ(Angle, Normal), 1);
-            P1.TangentX = cross(P1.TangentZ, float3(0, 0, 1));
-            AddPoint(VertexBuffer, VertexIndex + 0, P1);
-
-            P2.Position = CurrentPosition - CurrentTangent * CurrentHalfWidth;
-            P2.UV = float2(0.5 + CurrentFactor, Percentage);
-            P2.TangentZ = float4(RotateZ(-Angle, Normal), 1);
-            P2.TangentX = cross(P2.TangentZ, float3(0, 0, 1));
-            AddPoint(VertexBuffer, VertexIndex + 1, P2);
-
-            
-            if (i < LodSteps - 1)
-            {
-                // t1
-                AddTri(IndexBuffer, PrimitiveIndex + 0,
-                    VertexIndex + 0, VertexIndex + 1, VertexIndex + 3);
-                // t2
-                AddTri(IndexBuffer, PrimitiveIndex + 3,
-                    VertexIndex + 0, VertexIndex + 3, VertexIndex + 2);
-            }
-            else
-            {
-                // last triangle
-                AddTri(IndexBuffer, PrimitiveIndex + 0,
-                VertexIndex + 0, VertexIndex + 1, VertexIndex + 2);
-            }
-        }
-        
-        // last point
-        FGrassVertex Pe;
-        Pe.Position = FinalPosition;
-        Pe.UV = float2(0.5, 1);
-        Pe.TangentX = Tangent;
-        Pe.TangentZ = float4(Normal, 1);
-        AddPoint(VertexBuffer, VertexIndex, Pe);
-    }
 }

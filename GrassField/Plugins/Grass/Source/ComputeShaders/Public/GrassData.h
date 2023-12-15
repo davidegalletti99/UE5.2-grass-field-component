@@ -33,6 +33,27 @@ namespace GrassMesh {
 		return Conv.Out;
 	}
 
+	inline uint32 ComputeVertexBufferSize(const uint32 NumLod)
+	{
+		// Sum(i : 0 -> NumLod) (( i + 1 ) * 2 + 1)
+		return (NumLod + 3) * (NumLod + 1);
+	}
+	inline uint32 ComputeIndexBufferSize(const uint32 NumLod)
+	{
+		// Sum(i : 0 -> NumLod) ( i * 2 + 1) * 6
+		return (NumLod + 1) * (NumLod + 1) * 2 * 3;
+	}
+
+	inline uint32 ComputeVertexBufferOffset(const uint32 NumLod)
+	{
+		return NumLod * (NumLod + 2);
+	}
+
+	inline uint32 ComputeIndexBufferOffset(const uint32 NumLod)
+	{
+		return (NumLod * NumLod) * 2 * 3;
+	}
+	
 	struct COMPUTESHADERS_API FGrassData
 	{
 		FVector3f Position;

@@ -91,15 +91,6 @@ void CullGrassDataCS(
     }
 }
 
-float3 RotateZ(const float Angle, const float3 Vec)
-{
-    const float3x3 Rot =
-        float3x3(   cos(Angle), -sin(Angle),  0,
-                    sin(Angle),  cos(Angle),  0,
-                    0,           0,           1);
-    return mul(Rot, Vec);
-}
-
 void CreateGrassBlade(const FLodGrassData Data)
 {
     const uint LodSteps = Data.LodLevel;

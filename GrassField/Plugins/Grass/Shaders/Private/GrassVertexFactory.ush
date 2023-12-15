@@ -17,10 +17,6 @@
 
 
 #if USE_INSTANCING
-
-float4 InstancingOffset;
-uint InstanceOffset;
-
 StructuredBuffer<FGrassInstance> InstanceBuffer;
 float3 LodViewOrigin;
 #endif
@@ -32,21 +28,9 @@ struct FVertexFactoryInput
 	float2	UV	                                : ATTRIBUTE1;
     float3 TangentX                             : ATTRIBUTE2;
     float4 TangentZ                             : ATTRIBUTE3; // TangentZ.w contains sign of tangent basis determinant
-
-    
 #if USE_INSTANCING
-    // Dynamic instancing related attributes with InstanceIdOffset : ATTRIBUTE9
-	VF_GPUSCENE_DECLARE_INPUT_BLOCK(9)
-    
-    float4 InstanceOrigin                       : ATTRIBUTE4; // per-instance random in w 
-    half4 InstanceTransform1                    : ATTRIBUTE5; // hitproxy.r + 256 * selected in .w
-    half4 InstanceTransform2                    : ATTRIBUTE6; // hitproxy.g in .w
-    half4 InstanceTransform3                    : ATTRIBUTE7; // hitproxy.b in .w
-    
-	VF_INSTANCED_STEREO_DECLARE_INPUT_BLOCK()
-#endif //USE_INSTANCING
-    
     uint    InstanceId  : SV_InstanceID;
+#endif
     uint    VertexId    : SV_VertexID;
 };
 
@@ -147,6 +131,40 @@ half3x3 CalcTangentToLocal(FVertexFactoryInput Input, inout float TangentSign)
     return Result;
 }
 
+#if USE_INSTANCING
+float4x4 GetInstanceTransform(FVertexFactoryIntermediates Intermediates)
+{
+    return float4x4(
+        float4(Intermediates.InstanceTransform1.xyz, 0.0f),
+        float4(Intermediates.InstanceTransform2.xyz, 0.0f),
+        float4(Intermediates.InstanceTransform3.xyz, 0.0f),
+        float4(Intermediates.InstanceOrigin.xyz, 1.0f));
+}
+
+float4x4 GetInstancePrevTransform(FVertexFactoryIntermediates Intermediates)
+{
+    // Assumes instance transform never change, which means per-instance motion will cause TAA and motion blur artifacts.
+    return GetInstanceTransform(Intermediates);
+}
+
+half3x3 GetInstanceToLocal3x3(FVertexFactoryIntermediates Intermediates)
+{
+    return half3x3(Intermediates.InstanceTransform1.xyz, Intermediates.InstanceTransform2.xyz, Intermediates.InstanceTransform3.xyz);
+}
+
+float GetInstanceRandom(FVertexFactoryIntermediates Intermediates)
+{
+    return Intermediates.InstanceOrigin.w;
+}
+
+float3 GetInstanceOrigin(FVertexFactoryIntermediates Intermediates)
+{
+    float3 offset = mul(float3(0, 0, 0), GetInstanceToLocal3x3(Intermediates));
+    return Intermediates.InstanceOrigin.xyz + offset;
+}
+
+#endif	// USE_INSTANCING
+
 half3x3 CalcTangentToWorld(FVertexFactoryIntermediates Intermediates, half3x3 TangentToLocal)
 {
 #if USE_INSTANCING
@@ -161,45 +179,6 @@ half3x3 CalcTangentToWorld(FVertexFactoryIntermediates Intermediates, half3x3 Ta
 #endif	// USE_INSTANCING
     return TangentToWorld;
 }
-
-#if USE_INSTANCING
-float4x4 GetInstanceTransform(FVertexFactoryIntermediates Intermediates)
-{
-    return float4x4(
-		float4(Intermediates.InstanceTransform1.xyz, 0.0f),
-		float4(Intermediates.InstanceTransform2.xyz, 0.0f),
-		float4(Intermediates.InstanceTransform3.xyz, 0.0f),
-		float4(Intermediates.InstanceOrigin.xyz, 1.0f));
-}
-
-float4x4 GetInstancePrevTransform(FVertexFactoryIntermediates Intermediates)
-{
-	// Assumes instance transform never change, which means per-instance motion will cause TAA and motion blur artifacts.
-    return GetInstanceTransform(Intermediates);
-}
-
-half3x3 GetInstanceToLocal3x3(FVertexFactoryIntermediates Intermediates)
-{
-    return half3x3(Intermediates.InstanceTransform1.xyz, Intermediates.InstanceTransform2.xyz, Intermediates.InstanceTransform3.xyz);
-}
-
-float GetInstanceSelected(FVertexFactoryIntermediates Intermediates)
-{
-    return trunc(Intermediates.InstanceTransform1.w * (1.0 / 256.0));;
-}
-
-float GetInstanceRandom(FVertexFactoryIntermediates Intermediates)
-{
-    return Intermediates.InstanceOrigin.w;
-}
-
-float3 GetInstanceOrigin(FVertexFactoryIntermediates Intermediates)
-{
-    float3 offset = mul(InstancingOffset.xyz, GetInstanceToLocal3x3(Intermediates));
-    return Intermediates.InstanceOrigin.xyz + offset;
-}
-
-#endif	// USE_INSTANCING
 
 
 uint GetPrimitiveId(FVertexFactoryInterpolantsVSToPS Interpolants)
@@ -283,11 +262,14 @@ FMaterialVertexParameters GetMaterialVertexParameters(FVertexFactoryInput Input,
 	Result.TangentToWorld = Intermediates.TangentToWorld;
     Result.SceneData = Intermediates.SceneData;
     Result.PrimitiveId = Intermediates.SceneData.PrimitiveId;
+
     
     // Result.PreSkinnedPosition = WorldPosition;
     // Result.PreSkinnedNormal = TangentToLocal[2]; //TangentBias(Input.TangentZ.xyz);
 
 #if USE_INSTANCING
+    FPrimitiveSceneData PrimitiveData = GetPrimitiveData(Intermediates);
+    
 	float4x4 InstanceToLocal = GetInstanceTransform(Intermediates);
 	Result.InstanceLocalToWorld = LWCMultiply(InstanceToLocal, PrimitiveData.LocalToWorld);
 	Result.InstanceLocalPosition = Input.Position.xyz;
@@ -355,10 +337,12 @@ FVertexFactoryIntermediates GetVertexFactoryIntermediates(FVertexFactoryInput In
     Intermediates.LocalUV = Input.UV;
     
 #if USE_INSTANCING
-    Intermediates.InstanceTransform1 = Input.InstanceTransform1;
-    Intermediates.InstanceTransform2 = Input.InstanceTransform2;
-    Intermediates.InstanceTransform3 = Input.InstanceTransform3;
-    Intermediates.InstanceOrigin = Input.InstanceOrigin;
+    const FGrassInstance InstanceData = InstanceBuffer[Input.InstanceId];
+    
+    Intermediates.InstanceTransform1 = InstanceData.Transform[0];
+    Intermediates.InstanceTransform2 = InstanceData.Transform[1];
+    Intermediates.InstanceTransform3 = InstanceData.Transform[2];
+    Intermediates.InstanceOrigin = InstanceData.Transform[3];
 #endif // USE_INSTANCING
     
     float TangentSign = 1.0;
@@ -381,7 +365,7 @@ float4 VertexFactoryGetWorldPosition(FVertexFactoryInput Input, FVertexFactoryIn
     FLWCMatrix LocalToWorld = GetInstanceData(Intermediates).LocalToWorld;
 
 #if USE_INSTANCING
-    return CalcWorldPosition(float4(Input.Position, 1), GetInstanceTransform(Intermediates), LocalToWorld) * Intermediates.PerInstanceParams.y;
+    return CalcWorldPosition(float4(Input.Position, 1), GetInstanceTransform(Intermediates), LocalToWorld);
 #else
     return CalcWorldPosition(float4(Input.Position, 1), LocalToWorld);
 #endif	// USE_INSTANCING
@@ -436,12 +420,12 @@ float4 VertexFactoryGetPreviousWorldPosition(FVertexFactoryInput Input, FVertexF
 {
     FLWCMatrix PreviousLocalToWorld = GetInstanceData(Intermediates).PrevLocalToWorld;
     float4 PrevLocalPosition = float4(Input.Position, 1.0f);
-    {
 #if USE_INSTANCING
+    {
 		float4x4 InstanceTransform = GetInstancePrevTransform(Intermediates);
-		PrevLocalPosition = mul(Input.Position, InstanceTransform);
-#endif
+		PrevLocalPosition = mul(float4(Input.Position, 1.0f), InstanceTransform);
     }
+#endif
     return TransformPreviousLocalPositionToTranslatedWorld(PrevLocalPosition.xyz, PreviousLocalToWorld);
 }
 

@@ -21,15 +21,19 @@ static groupshared float4x4 NoiseToWorld;
 void SetTransforms(const float2 InScale, const float InAmplitude, const float InSpacing, const int InWidth, const int InHeight)
 {
 	WorldToNoise = float3x3(
-		float3(InScale.x / InWidth, 0, - InScale.x / 2),
-		float3(0, InScale.y / InHeight, - InScale.y / 2),
-		float3(0, 0, 1));
+		float3(InScale.x / InWidth, 0, 0),
+		float3(0, InScale.y / InHeight, 0),
+		float3(- InScale.x / 2, - InScale.y / 2, 1)
+	);
+	WorldToNoise = transpose(WorldToNoise);
 	
 	NoiseToWorld = float4x4(
 		float4(InWidth * InSpacing / InScale.x, 0, 0, 0),
 		float4(0, InHeight * InSpacing / InScale.y, 0, 0),
 		float4(0, 0, InAmplitude, 0),
-		float4(0, 0, 0, 1));
+		float4(0, 0, 0, 1)
+	);
+	NoiseToWorld = transpose(NoiseToWorld);
 }
 
 void SetSeed(const float Time)
