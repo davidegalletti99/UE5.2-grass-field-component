@@ -1,7 +1,7 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 
-#include "FGrassInstancingVertexFactory.h"
+#include "..\Public\GrassInstancingVertexFactory.h"
 
 #include "Engine/Engine.h"
 #include "EngineGlobals.h"
@@ -20,19 +20,33 @@ IMPLEMENT_GLOBAL_SHADER_PARAMETER_STRUCT(FGrassInstancingParameters, "GrassInsta
 
 void FGrassInstancingVertexBuffer::InitRHI()
 {
-	const int32 VerticesNum = GrassMesh::ComputeVertexBufferSize(MaxLod);
-	const int32 VertexBufferSize = VerticesNum * sizeof(GrassMesh::FGrassVertex);
-	FRHIResourceCreateInfo CreateInfo(TEXT("FGrass.VertexBuffer"));
-	VertexBufferRHI = RHICreateVertexBuffer(VertexBufferSize, BUF_UnorderedAccess | BUF_DrawIndirect, CreateInfo);
+	if (Vertices.IsEmpty())
+		return;
+	
+	FRHIResourceCreateInfo CreateInfo(TEXT("FGrass.VertexBuffer"), &Vertices);
+	VertexBufferRHI = RHICreateVertexBuffer(Vertices.GetResourceDataSize(), BUF_UnorderedAccess | BUF_DrawIndirect, CreateInfo);
+}
+
+void FGrassInstancingVertexBuffer::ReleaseRHI()
+{
+	Vertices.Empty();
+	FVertexBuffer::ReleaseRHI();
 }
 
 void FGrassInstancingIndexBuffer::InitRHI()
 {
-	const int32 IndicesNum = GrassMesh::ComputeIndexBufferSize(MaxLod);
-	const int32 IndexBufferSize = IndicesNum * sizeof(int32);
-	FRHIResourceCreateInfo CreateInfo(TEXT("FGrass.IndexBuffer"));
-	IndexBufferRHI = RHICreateVertexBuffer(IndexBufferSize, BUF_UnorderedAccess | BUF_DrawIndirect, CreateInfo);
+	if (Indices.IsEmpty())
+		return;
+	
+	FRHIResourceCreateInfo CreateInfo(TEXT("FGrass.IndexBuffer"), &Indices);
+	IndexBufferRHI = RHICreateVertexBuffer(Indices.GetResourceDataSize(), BUF_UnorderedAccess | BUF_DrawIndirect, CreateInfo);
 
+}
+
+void FGrassInstancingIndexBuffer::ReleaseRHI()
+{
+	Indices.Empty();
+	FIndexBuffer::ReleaseRHI();
 }
 
 FGrassInstancingVertexFactory::FGrassInstancingVertexFactory(const ERHIFeatureLevel::Type InFeatureLevel)
@@ -45,19 +59,16 @@ FGrassInstancingVertexFactory::FGrassInstancingVertexFactory(const ERHIFeatureLe
 
 FGrassInstancingVertexFactory::~FGrassInstancingVertexFactory()
 {
+	
 }
 
 void FGrassInstancingVertexFactory::SetData(FGrassInstancingVertexDataType& InData)
 {
 	Data = InData;
-
-	if (IsInitialized())
-		UpdateRHI();
-	else
-		InitResource();
+	UpdateRHI();
 }
 
-void FGrassInstancingVertexFactory::InitData(FVertexBuffer* VertexBuffer)
+void FGrassInstancingVertexFactory::SetData(const FVertexBuffer* VertexBuffer)
 {
 	ENQUEUE_RENDER_COMMAND(InitGrassVertexFactory)([VertexBuffer, this](FRHICommandListImmediate& RHICmdListImmediate)
 		{
@@ -73,10 +84,10 @@ void FGrassInstancingVertexFactory::InitData(FVertexBuffer* VertexBuffer)
 
 void FGrassInstancingVertexFactory::InitRHI()
 {
-	
-	UniformBuffer = FGrassBufferRef::CreateUniformBufferImmediate(Params, UniformBuffer_MultiFrame);
-
 	check(Streams.Num() == 0);
+	
+	UniformBuffer = FGrassInstancingBufferRef::CreateUniformBufferImmediate(Params, UniformBuffer_MultiFrame);
+	
 	FVertexDeclarationElementList Elements;
 	if (Data.PositionComponent.VertexBuffer != nullptr)
 		Elements.Add(AccessStreamComponent(Data.PositionComponent, 0));
@@ -89,7 +100,6 @@ void FGrassInstancingVertexFactory::InitRHI()
 	
 	if (Data.TangentBasisComponents[1].VertexBuffer != nullptr)
 		Elements.Add(AccessStreamComponent(Data.TangentBasisComponents[1], 3));
-	// AddPrimitiveIdStreamElement(EVertexInputStreamType::Default, Elements, 9, 4);
 	
 	InitDeclaration(Elements, EVertexInputStreamType::Default);
 	check(Streams.Num() > 0);
@@ -115,7 +125,7 @@ bool FGrassInstancingVertexFactory::ShouldCompilePermutation(const FVertexFactor
 
 void FGrassInstancingVertexFactory::ModifyCompilationEnvironment(const FVertexFactoryShaderPermutationParameters &Parameters, FShaderCompilerEnvironment &OutEnvironment)
 {
-	
+	OutEnvironment.SetDefine(TEXT("USE_INSTANCING"), 1);
 }
 
 void FGrassInstancingVertexFactory::ValidateCompiledResult(

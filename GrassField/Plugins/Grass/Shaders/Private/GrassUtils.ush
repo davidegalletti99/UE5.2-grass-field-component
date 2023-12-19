@@ -109,7 +109,37 @@ struct FPackedLodGrassData
 	// uint TiltAndBand;
 };
 
+struct FGrassVertex
+{
+    float3 Position;
+    float2 UV;
+    
+    float3 TangentX;
+    float4 TangentZ; // TangentZ.w contains sign of tangent basis determinant
+};
 
+struct FPackedGrassInstance
+{
+    float3 Origin;
+    uint HeightAndWidth;
+    uint Facing;
+    int Hash;
+};
+
+struct FGrassInstance
+{
+    float3 Origin;
+    float2 Facing;
+    float Height;
+    float Width;
+    int Hash;
+};
+
+/*
+ * Pack the GrassData into a PackedGrassData.
+ * @param InData The raw data.
+ * @return The packed data.
+ */
 FPackedGrassData Pack(const FGrassData InData)
 {
     FPackedGrassData OutData = (FPackedGrassData) 0;
@@ -136,6 +166,11 @@ FPackedGrassData Pack(const FGrassData InData)
     return OutData;
 }
 
+/*
+ * Unpack the PackedGrassData into a LodGrassData.
+ * @param InData The packed data.
+ * @return The unpacked data.
+ */
 FGrassData Unpack(const FPackedGrassData InData)
 {
     FGrassData OutData = (FGrassData) 0;
@@ -154,6 +189,11 @@ FGrassData Unpack(const FPackedGrassData InData)
     return OutData;
 }
 
+/*
+ * Unpack the PackedLodGrassData into a LodGrassData.
+ * @param InData The packed data.
+ * @return The unpacked data.
+ */
 FLodGrassData Unpack(const FPackedLodGrassData InData)
 {
     FLodGrassData OutData = (FLodGrassData) 0;
@@ -172,23 +212,57 @@ FLodGrassData Unpack(const FPackedLodGrassData InData)
     
     return OutData;
 }
-struct FGrassVertex
+
+FGrassInstance Unpack(const FPackedGrassInstance InData)
 {
-    float3 Position;
-    float2 UV;
+    FGrassInstance OutData = (FGrassInstance) 0;
     
-    float3 TangentX;
-    float4 TangentZ; // TangentZ.w contains sign of tangent basis determinant
-};
+    OutData.Origin = InData.Origin;
+    OutData.Hash = InData.Hash;
+    
+    OutData.Height = asfloat((InData.HeightAndWidth & 0xffff0000) >> 1);
+    OutData.Width = asfloat((InData.HeightAndWidth & 0x0000ffff) << 15);
+    
+    const uint SignX = InData.Facing & 0x80000000;
+    const uint SignY = (InData.Facing & 0x00008000) << 16;
+    OutData.Facing.x = asfloat(SignX | (InData.Facing & 0x7fff0000) >> 1);
+    OutData.Facing.y = asfloat(SignY | (InData.Facing & 0x00007fff) << 15);
+    
+    return OutData;
+}
 
-struct FGrassInstance
+/*
+ * Unpack the Height and Width from the HeightAndWidth field of the packed data.
+ * @param HeightAndWidth The HeightAndWidth field of the packed data.
+ * @return float2(Height, Width)
+ */
+float2 UnpackHeightAndWidth(const uint HeightAndWidth)
 {
-    float3 Origin;
-    float Width;
-    float Height;
-    float2 Facing;
-};
+    float2 HeightAndWidthF = 0;
+    HeightAndWidthF.x = asfloat((HeightAndWidth & 0x0000ffff) << 15);
+    HeightAndWidthF.y = asfloat((HeightAndWidth & 0xffff0000) >> 1);
+    
+    return HeightAndWidthF;
+}
 
+/*
+ * Unpack the Facing from the Facing field of the packed data.
+ * @param Facing The Facing field of the packed data.
+ * @return the unpacked Facing.
+ */
+float2 UnpackFacing(const uint Facing)
+{
+    float2 FacingF = 0;
+    
+    const uint SignX = Facing & 0x80000000;
+    const uint SignY = (Facing & 0x00008000) << 16;
+    FacingF.x = asfloat(SignX | (Facing & 0x7fff0000) >> 1);
+    FacingF.y = asfloat(SignY | (Facing & 0x00007fff) << 15);
+    
+    return FacingF;
+}
+
+/*
 uint ComputeVertexBufferSize(const uint NumLod)
 {
     // Sum(i : 0 -> NumLod) (( i + 1 ) * 2 + 1)
@@ -209,6 +283,7 @@ uint ComputeIndexBufferOffset(const uint NumLod)
 {
     return (NumLod * NumLod) * 2 * 3;
 }
+*/
 
 float3 RotateZ(const float Angle, const float3 Vec)
 {
@@ -243,7 +318,7 @@ float4x4 ComputeTransformRotationMatrix(FGrassInstance InstanceData)
 
 float4x4 ComputeTransformMatrixNoScale(FGrassInstance InstanceData)
 {
-    const float4x4 RotationMatrix = ComputeRotationNoOffsetMatrix(InstanceData);
+    const float4x4 RotationMatrix = ComputeTransformRotationMatrix(InstanceData);
     const float4x4 TranslationMatrix = TRANSLATION_MATRIX_4X4(InstanceData.Origin);
     
     return mul(TranslationMatrix, RotationMatrix);
@@ -255,77 +330,6 @@ float4x4 ComputeTransformMatrix(FGrassInstance InstanceData)
     const float4x4 ScaleMatrix = SCALE_MATRIX_4X4(float3(InstanceData.Width, InstanceData.Width, InstanceData.Height));
     
     return mul(NoScaleTransform, ScaleMatrix);
-}
-
-
-void CreateGrassModels(
-    in const RWStructuredBuffer<FGrassVertex> VertexBuffer,
-    in const RWStructuredBuffer<uint> IndexBuffer,
-    uint2 LodRange)
-{
-    const float MaxHeight = 1.0f;
-    const float MaxWidth = 1.0f;
-    
-    const float3 InitialPosition = float3(0, 0, 0);
-    const float3 FinalPosition = float3(0, 0, 1) * MaxHeight;
-    const float2 Facing = FORWARD_VECTOR.xy;
-    
-    
-    const float3 Normal = float3(Facing, 0);
-    const float3 Tangent = cross(Normal, float3(0, 0, 1));
-    const float Angle = PI * 0.1;
-    
-    uint VertexIndex = 0, PrimitiveIndex = 0;
-    for (uint LodSteps = LodRange.x; LodSteps < LodRange.y; LodSteps++)
-    {
-        for (uint i = 0; i < LodSteps; i++, VertexIndex += 2, PrimitiveIndex += 6)
-        {
-            const float Percentage = float(i) / float(LodSteps);
-            const float CurrentFactor = QUAD_BEZ(1, 1 * 0.85, 0, Percentage) / 2;
-            const float3 CurrentPosition = QUAD_BEZ(InitialPosition, FinalPosition * 0.85, FinalPosition, Percentage);
-            
-            const float CurrentHalfWidth = CurrentFactor * MaxWidth;
-            
-            FGrassVertex P1, P2;
-            
-            P1.Position = CurrentPosition + Tangent * CurrentHalfWidth;
-            P1.UV = float2(0.5 - CurrentFactor, Percentage);
-            P1.TangentZ = float4(RotateZ(Angle, Normal), 1);
-            P1.TangentX = cross(P1.TangentZ.xyz, float3(0, 0, 1));
-            AddPoint(VertexBuffer, VertexIndex + 0, P1);
-
-            P2.Position = CurrentPosition - Tangent * CurrentHalfWidth;
-            P2.UV = float2(0.5 + CurrentFactor, Percentage);
-            P2.TangentZ = float4(RotateZ(-Angle, Normal), 1);
-            P2.TangentX = cross(P2.TangentZ.xyz, float3(0, 0, 1));
-            AddPoint(VertexBuffer, VertexIndex + 1, P2);
-
-            
-            if (i < LodSteps - 1)
-            {
-                // t1
-                AddTri(IndexBuffer, PrimitiveIndex + 0,
-                    VertexIndex + 0, VertexIndex + 1, VertexIndex + 3);
-                // t2
-                AddTri(IndexBuffer, PrimitiveIndex + 3,
-                    VertexIndex + 0, VertexIndex + 3, VertexIndex + 2);
-            }
-            else
-            {
-                // last triangle
-                AddTri(IndexBuffer, PrimitiveIndex + 0,
-                VertexIndex + 0, VertexIndex + 1, VertexIndex + 2);
-            }
-        }
-        
-        // last point
-        FGrassVertex Pe;
-        Pe.Position = FinalPosition;
-        Pe.UV = float2(0.5, 1);
-        Pe.TangentX = Tangent;
-        Pe.TangentZ = float4(Normal, 1);
-        AddPoint(VertexBuffer, VertexIndex, Pe);
-    }
 }
 
 void ComputeFrustumPlanes(
@@ -341,7 +345,7 @@ void ComputeFrustumPlanes(
 }
 
 /** Return false if the AABB is completely outside one of the planes. */
-bool PlaneTestAABB(in float4 InPlanes[5], in float3 InCenter, in float3 InExtent)
+bool PlaneTestAABB(in float4 InPlanes[5], in const float3 InCenter, in const float3 InExtent)
 {
     bool bPlaneTest = true;
 	
@@ -353,26 +357,26 @@ bool PlaneTestAABB(in float4 InPlanes[5], in float3 InCenter, in float3 InExtent
         PlaneSigns.y = InPlanes[PlaneIndex].y >= 0.f ? 1.f : -1.f;
         PlaneSigns.z = InPlanes[PlaneIndex].z >= 0.f ? 1.f : -1.f;
 
-        bool bInsidePlane = dot(InPlanes[PlaneIndex], float4(InCenter + InExtent * PlaneSigns, 1.0f)) > 0.f;
+        const bool bInsidePlane = dot(InPlanes[PlaneIndex], float4(InCenter + InExtent * PlaneSigns, 1.0f)) > 0.f;
         bPlaneTest = bPlaneTest && bInsidePlane;
     }
 
     return bPlaneTest;
 }
 
-bool IsInViewFrustum(in float3 position, in float4x4 ViewProjectionMatrix, in float margin)
+bool IsInViewFrustum(in const float3 Position, in const float4x4 ViewProjectionMatrix, in const float Margin)
 {
-    const float4 position4 = float4(position, 1.0f);
-    const float4 viewspace = mul(position4, ViewProjectionMatrix);
+    const float4 Position4 = float4(Position, 1.0f);
+    const float4 ViewSpace = mul(Position4, ViewProjectionMatrix);
     
-    float3 clipspace = viewspace.xyz;
-    clipspace /= viewspace.w;
+    float3 ClipSpace = ViewSpace.xyz;
+    ClipSpace /= ViewSpace.w;
 
-    clipspace.xy = clipspace.xy / 2.0f + 0.5f;
+    ClipSpace.xy = ClipSpace.xy / 2.0f + 0.5f;
     
-    return clipspace.x >= 0.0f - margin && clipspace.x <= 1.0f + margin
-        && clipspace.y >= 0.0f - margin && clipspace.y <= 1.0f + margin
-        && clipspace.z >= 0.0f && clipspace.z <= 1.0f;
+    return ClipSpace.x >= 0.0f - Margin && ClipSpace.x <= 1.0f + Margin
+        && ClipSpace.y >= 0.0f - Margin && ClipSpace.y <= 1.0f + Margin
+        && ClipSpace.z >= 0.0f && ClipSpace.z <= 1.0f;
 }
 
 /**

@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "GrassData.h"
 
 /**
  * Per frame UserData to pass to the vertex shader.
@@ -16,7 +17,7 @@ struct FGrassInstancingUserData : FOneFrameResource
 /**
  * 
  */
-class FGrassInstancingVertexBuffer : FVertexBuffer
+class FGrassInstancingVertexBuffer : public FVertexBuffer
 {
 public:
 	FGrassInstancingVertexBuffer()
@@ -24,8 +25,10 @@ public:
 		
 	}
 
-	void InitRHI() override;
-	uint32 MaxLod = 0;
+	virtual void InitRHI() override;
+	virtual void ReleaseRHI() override;
+	
+	TResourceArray<GrassMesh::FGrassVertex> Vertices;
 };
 
 /*
@@ -40,7 +43,9 @@ public:
 	}
 
 	virtual void InitRHI() override;
-	uint32 MaxLod = 0;
+	virtual void ReleaseRHI() override;
+	
+	TResourceArray<uint32> Indices;
 };
 
 struct FGrassInstancingVertexDataType
@@ -65,7 +70,7 @@ BEGIN_GLOBAL_SHADER_PARAMETER_STRUCT(FGrassInstancingParameters, )
 // SHADER_PARAMETER_TEXTURE(Texture2D<uint4>, PageTableTexture)
 END_GLOBAL_SHADER_PARAMETER_STRUCT()
 
-typedef TUniformBufferRef<FGrassInstancingParameters> FGrassBufferRef;
+typedef TUniformBufferRef<FGrassInstancingParameters> FGrassInstancingBufferRef;
 
 class FGrassInstancingVertexFactory : public FVertexFactory
 {
@@ -80,7 +85,7 @@ public:
 	virtual ~FGrassInstancingVertexFactory() override;
 
 
-	void InitData(FVertexBuffer* VertexBuffer);
+	void SetData(const FVertexBuffer* VertexBuffer);
 
 	virtual void InitRHI() override;
 	virtual void ReleaseRHI() override;
@@ -110,8 +115,8 @@ private:
 
 	FGrassInstancingParameters Params;
 public:
-	FGrassBufferRef UniformBuffer;
-
+	FGrassInstancingBufferRef UniformBuffer;
+	
 	// Shader parameters is the data passed to our vertex shader
 	friend class FGrassShaderParameters;
 };

@@ -8,7 +8,6 @@
 #include "Engine/World.h"
 
 #include "Math.h"
-#include "GrassSceneProxy.h"
 #include "GrassData.h"
 
 #include "GrassFieldComponent.generated.h"
@@ -115,7 +114,7 @@ public:
 	
 	UMaterialInterface* GetMaterial() const { return Material; }
 
-	float GetCutOffDistance() const { return CutoffDistance; }
+	float GetCutoffDistance() const { return CutoffDistance; }
 	FUintVector2 GetLodStepsRange() const { return LodStepsRange; }
 	TArray<UGrassMeshSection *>& GetMeshSections() { return Sections; }
 

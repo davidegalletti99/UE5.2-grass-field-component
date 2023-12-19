@@ -3,7 +3,8 @@
 
 #include "GrassFieldComponent.h"
 
-#include "Chaos/ChaosDebugDraw.h"
+// #include "GrassInstancingSceneProxy.h"
+#include "GrassSceneProxy.h"
 
 UGrassMeshSection::UGrassMeshSection(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)

@@ -23,16 +23,16 @@
 #include "Materials/MaterialRenderProxy.h"
 #include "Materials/Material.h"
 
-#include "GrassVertexFactory.h"
+#include "GrassInstancingVertexFactory.h"
 #include "GrassData.h"
 #include "GrassFieldComponent.h"
 #include "GrassShaders.h"
 
-class FGrassSceneProxy;
-class FGrassSectionProxy;
-class FGrassRendererExtension;
+class FGrassInstancingSceneProxy;
+class FGrassInstancingSectionProxy;
+class FGrassInstancingRendererExtension;
 
-namespace GrassMesh
+namespace GrassInstancingMesh
 {
 	/* Keep indirect args offsets in sync with ISM.usf. */
 	static constexpr int32 IndirectArgsByteOffset_FinalCull = 0;
@@ -41,10 +41,15 @@ namespace GrassMesh
 	/** Buffers filled by GPU culling. */
 	struct COMPUTESHADERS_API FPersistentBuffers
 	{
-		FGrassSectionProxy* SectionProxy = nullptr;
+		FGrassInstancingSectionProxy* SectionProxy = nullptr;
 		FBufferRHIRef GrassDataBuffer;
 		FShaderResourceViewRHIRef GrassDataBufferSRV;
 
+		/* Culled instance buffer. */
+		FBufferRHIRef InstanceBuffer;
+		FUnorderedAccessViewRHIRef InstanceBufferUAV;
+		FShaderResourceViewRHIRef InstanceBufferSRV;
+		
 		/* IndirectArgs buffer for final DrawInstancedIndirect. */
 		FBufferRHIRef IndirectArgsBuffer;
 		FUnorderedAccessViewRHIRef IndirectArgsBufferUAV;
@@ -66,10 +71,8 @@ namespace GrassMesh
 	{
 		bool IsValid = false;
 		TResourceArray<GrassMesh::FPackedGrassData>* GrassData;
-		FUintVector2 LodStepsRange;
-		float CutOffDistance;
-		FGrassVertexBuffer* VertexBuffer;
-		FGrassIndexBuffer* IndexBuffer;
+		float CutoffDistance;
+		int NumIndices;
 	};
 
 	/** View description used for LOD calculation in the main view. */
@@ -112,20 +115,15 @@ namespace GrassMesh
 	};
 }
 
-const static FName NAME_Grass(TEXT("Grass"));
+const static FName NAME_GrassInstancing(TEXT("GrassInstancing"));
 
-class COMPUTESHADERS_API FGrassSectionProxy
+class COMPUTESHADERS_API FGrassInstancingSectionProxy
 {
 public:
-	explicit FGrassSectionProxy(const ERHIFeatureLevel::Type FeatureLevel);
-	~FGrassSectionProxy()
+	explicit FGrassInstancingSectionProxy(const ERHIFeatureLevel::Type FeatureLevel);
+	
+	~FGrassInstancingSectionProxy()
 	{
-		if(VertexBuffer.IsInitialized())
-			VertexBuffer.ReleaseResource();
-
-		if (IndexBuffer.IsInitialized())
-			IndexBuffer.ReleaseResource();
-		
 		if (VertexFactory.IsInitialized())
 			VertexFactory.ReleaseResource();
 	}
@@ -136,26 +134,19 @@ public:
 		return reinterpret_cast<size_t>(&UniquePointer);
 	}
 
-public:
 	TResourceArray<GrassMesh::FPackedGrassData> GrassData;
 	FBox Bounds;
-	FUintVector2 LodStepsRange;
+	uint32 NumIndices;
 	float CutoffDistance;
 	
-	FGrassVertexBuffer VertexBuffer;
-	FGrassIndexBuffer IndexBuffer;
-	FGrassVertexFactory VertexFactory;
+	FGrassInstancingVertexFactory VertexFactory;
 };
 
-class COMPUTESHADERS_API FGrassSceneProxy final : public FPrimitiveSceneProxy
+class COMPUTESHADERS_API FGrassInstancingSceneProxy final : public FPrimitiveSceneProxy
 {
 public:
-	explicit FGrassSceneProxy(class UGrassFieldComponent* InComponent);
+	explicit FGrassInstancingSceneProxy(class UGrassFieldComponent* InComponent);
 
-	virtual ~FGrassSceneProxy() override
-	{
-		Sections.Empty();
-	}
 
 protected:
 	//~ Begin FPrimitiveSceneProxy Interface
@@ -182,21 +173,30 @@ public:
 	class FMaterialRenderProxy *Material;
 	FMaterialRelevance MaterialRelevance;
 
-	TArray<FGrassSectionProxy*> Sections;
+	FUintVector2 MinMaxLodSteps;
+	
+	FGrassInstancingVertexBuffer MinLodVertexBuffer;
+	FGrassInstancingIndexBuffer MinLodIndexBuffer;
+	
+	FGrassInstancingVertexBuffer MaxLodVertexBuffer;
+	FGrassInstancingIndexBuffer MaxLodIndexBuffer;
+
+	float CutoffDistance;
+	TArray<FGrassInstancingSectionProxy*> Sections;
 };
 
 //  Notes: Looks like GetMeshShaderMap is returning nullptr during the DepthPass
 
 /** Renderer extension to manage the buffer pool and add hooks for GPU culling passes. */
-class FGrassRendererExtension : public FRenderResource
+class FGrassInstancingRendererExtension : public FRenderResource
 {
 public:
-	FGrassRendererExtension()
+	FGrassInstancingRendererExtension()
 		: bInFrame(false), DiscardId(0)
 	{
 	}
 
-	virtual ~FGrassRendererExtension() override
+	virtual ~FGrassInstancingRendererExtension() override
 	{
 	}
 
@@ -209,8 +209,8 @@ public:
 	 *  This allocates the buffers to use for the frame and adds
 	 *  the work to fill the buffers to the queue.
 	 */
-	GrassMesh::FPersistentBuffers& AddWork(
-		FGrassSectionProxy* InSection,
+	GrassInstancingMesh::FPersistentBuffers& AddWork(
+		FGrassInstancingSectionProxy* InSection,
 		const FSceneView* InMainView,
 		const FSceneView* InCullView);
 
@@ -234,14 +234,14 @@ private:
 	bool bInFrame;
 
 	/** Buffers to fill. Resources can persist between frames to reduce allocation cost, but contents don't persist. */
-	TArray<GrassMesh::FPersistentBuffers> Buffers;
+	TArray<GrassInstancingMesh::FPersistentBuffers> Buffers;
 	/** Per buffer frame time stamp of last usage. */
 	TArray<uint32> DiscardIds;
 	/** Current frame time stamp. */
 	uint32 DiscardId;
 
 	/** Array of unique scene proxies to render this frame. */
-	TArray<FGrassSectionProxy*> SceneProxies;
+	TArray<FGrassInstancingSectionProxy*> SceneProxies;
 	/** Array of unique main views to render this frame. */
 	TArray<const FSceneView*> MainViews;
 	/** Array of unique culling views to render this frame. */

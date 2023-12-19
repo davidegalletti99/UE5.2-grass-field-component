@@ -7,13 +7,14 @@
 #define NUM_TEX_COORD_INTERPOLATORS 1
 #define NUM_MATERIAL_TEXCOORDS_VERTEX 1
 
+#pragma once
 #include "/Engine/Private/MaterialTemplate.ush"
 #include "/Engine/Public/Platform.ush"
 #endif
 
 #include "/Engine/Private/VertexFactoryCommon.ush"
 #include "GrassUtils.ush"
-
+#include "Noise.ush"
 
 
 #if USE_INSTANCING
@@ -48,6 +49,8 @@ struct FVertexFactoryIntermediates
     FSceneDataIntermediates SceneData;
 
 #if USE_INSTANCING
+    float4x4 Transform;
+    
     float4 InstanceOrigin;
     float4 InstanceTransform1;
     float4 InstanceTransform2;
@@ -59,9 +62,8 @@ struct FVertexFactoryIntermediates
 struct FVertexFactoryInterpolantsVSToPS
 {
     TANGENTTOWORLD_INTERPOLATOR_BLOCK
-#if !USE_INSTANCING
+    
     nointerpolation uint PrimitiveId : PRIMITIVE_ID;
-#endif // !USE_INSTANCING
     
 #if NUM_TEX_COORD_INTERPOLATORS
     float4 TexCoords[(NUM_TEX_COORD_INTERPOLATORS + 1) / 2] : TEXCOORD0;
@@ -154,7 +156,7 @@ half3x3 GetInstanceToLocal3x3(FVertexFactoryIntermediates Intermediates)
 
 float GetInstanceRandom(FVertexFactoryIntermediates Intermediates)
 {
-    return Intermediates.InstanceOrigin.w;
+    return rand4dTo1d(Intermediates.InstanceOrigin);
 }
 
 float3 GetInstanceOrigin(FVertexFactoryIntermediates Intermediates)
@@ -183,11 +185,7 @@ half3x3 CalcTangentToWorld(FVertexFactoryIntermediates Intermediates, half3x3 Ta
 
 uint GetPrimitiveId(FVertexFactoryInterpolantsVSToPS Interpolants)
 {
-#if USE_INSTANCING
-    return 0;
-#else
     return Interpolants.PrimitiveId;
-#endif
 }
 
 /** Get ID in the GPU Scene. */
@@ -225,6 +223,13 @@ float2 GetUV(FVertexFactoryInterpolantsVSToPS Interpolants, uint UVIndex)
 
 #endif
 
+#if USE_INSTANCING
+float4 VertexFactoryGetInstanceHitProxyId(FVertexFactoryInput Input, FVertexFactoryIntermediates Intermediates)
+{
+    return 0;
+}
+#endif // USE_INSTANCING
+
 /** Converts from vertex factory specific interpolants to a FMaterialPixelParameters, which is used by material inputs. */
 FMaterialPixelParameters GetMaterialPixelParameters(FVertexFactoryInterpolantsVSToPS Interpolants, float4 SvPosition)
 {
@@ -253,6 +258,7 @@ FMaterialPixelParameters GetMaterialPixelParameters(FVertexFactoryInterpolantsVS
     return Result;
 }
 
+// TODO: Capire come modificare per usare l'instancing
 /** Converts from vertex factory specific input to a FMaterialVertexParameters, which is used by vertex shader material inputs. */
 FMaterialVertexParameters GetMaterialVertexParameters(FVertexFactoryInput Input, FVertexFactoryIntermediates Intermediates, float3 WorldPosition, half3x3 TangentToLocal)
 {
@@ -274,7 +280,6 @@ FMaterialVertexParameters GetMaterialVertexParameters(FVertexFactoryInput Input,
 	Result.InstanceLocalToWorld = LWCMultiply(InstanceToLocal, PrimitiveData.LocalToWorld);
 	Result.InstanceLocalPosition = Input.Position.xyz;
 	Result.InstanceId = GetInstanceId(Input.InstanceId); 
-	Result.InstanceOffset = InstanceOffset;
 	Result.PrevFrameLocalToWorld = LWCMultiply(GetInstancePrevTransform(Intermediates), PrimitiveData.PreviousLocalToWorld);
 
 	// Calculate derived world to local
@@ -314,15 +319,16 @@ FMaterialVertexParameters GetMaterialVertexParameters(FVertexFactoryInput Input,
 
 #if USE_INSTANCING
 float4 CalcWorldPosition(float4 Position, float4x4 InstanceTransform, FLWCMatrix LocalToWorld)
+{
+    return TransformLocalToTranslatedWorld(mul(Position, InstanceTransform).xyz, LocalToWorld);
+}
 #else
 float4 CalcWorldPosition(float4 Position, FLWCMatrix LocalToWorld)
-#endif	// USE_INSTANCING
 {
-#if USE_INSTANCING
-    return TransformLocalToTranslatedWorld(mul(Position, InstanceTransform).xyz, LocalToWorld);
-#endif // USE_INSTANCING
     return TransformLocalToTranslatedWorld(Position.xyz, LocalToWorld);
 }
+#endif // USE_INSTANCING
+    
 
 
 /** Compute the intermediates for a given vertex. */
@@ -330,7 +336,6 @@ FVertexFactoryIntermediates GetVertexFactoryIntermediates(FVertexFactoryInput In
 {
     
     FVertexFactoryIntermediates Intermediates = (FVertexFactoryIntermediates)0;
-    FPrimitiveSceneData PrimitiveData = GetPrimitiveData(Intermediates);
     Intermediates.SceneData = VF_GPUSCENE_GET_INTERMEDIATES(Input);
 	// Position in local space
     Intermediates.LocalPos = Input.Position;
@@ -338,11 +343,14 @@ FVertexFactoryIntermediates GetVertexFactoryIntermediates(FVertexFactoryInput In
     
 #if USE_INSTANCING
     const FGrassInstance InstanceData = InstanceBuffer[Input.InstanceId];
-    
-    Intermediates.InstanceTransform1 = InstanceData.Transform[0];
-    Intermediates.InstanceTransform2 = InstanceData.Transform[1];
-    Intermediates.InstanceTransform3 = InstanceData.Transform[2];
-    Intermediates.InstanceOrigin = InstanceData.Transform[3];
+
+    const float4x4 Transform = ComputeTransformMatrix(InstanceBuffer[Input.InstanceId]);
+    Intermediates.Transform = Transform;
+    const float4x4 Transposed = transpose(Transform);
+    Intermediates.InstanceTransform1 = Transposed[0];
+    Intermediates.InstanceTransform2 = Transposed[1];
+    Intermediates.InstanceTransform3 = Transposed[2];
+    Intermediates.InstanceOrigin = Transposed[3];
 #endif // USE_INSTANCING
     
     float TangentSign = 1.0;
