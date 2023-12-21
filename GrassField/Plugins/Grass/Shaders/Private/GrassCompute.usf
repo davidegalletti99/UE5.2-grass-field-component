@@ -29,8 +29,8 @@ RWStructuredBuffer<uint> RWIndexBuffer;
 StructuredBuffer<uint> IndexBuffer;
 
 // InstanceBuffer
-RWStructuredBuffer<FPackedGrassInstance> RWInstanceBuffer;
-StructuredBuffer<FPackedGrassInstance> InstanceBuffer;
+RWStructuredBuffer<FGrassInstance> RWInstanceBuffer;
+StructuredBuffer<FGrassInstance> InstanceBuffer;
 
 // IndirectArgsBuffer
 RWStructuredBuffer<uint> RWIndirectArgsBuffer;
@@ -105,12 +105,10 @@ void ComputeInstancingDataCS(
     if (GrassIndex >= Counter[0])
         return;
 
-    const FPackedGrassData Data = InstancingCulledGrassDataBuffer[GrassIndex];
-    FPackedGrassInstance Instance = (FPackedGrassInstance) 0;
-
-    Instance.Origin = Data.Position;
-    Instance.Facing = Data.Facing;
-    Instance.HeightAndWidth = Data.HeightAndWidth;
+    const FGrassData Data = Unpack(InstancingCulledGrassDataBuffer[GrassIndex]);
+    
+    FGrassInstance Instance;
+    Instance.Transform = transpose(ComputeTransformMatrix(Data));
     Instance.Hash = Data.Hash;
     
     int WriteIndex;

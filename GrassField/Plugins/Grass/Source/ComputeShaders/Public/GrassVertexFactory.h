@@ -12,7 +12,7 @@
 #include "VertexFactory.h"
 #include "GrassData.h"
 
-#if USE_INSTANCING
+#if My_USE_INSTANCING
 /**
  * Per frame UserData to pass to the vertex shader.
  */
@@ -152,7 +152,7 @@ public:
 		FVertexInputStreamArray& VertexStreams) const;
 
 protected:
-#if USE_INSTANCING
+#if My_USE_INSTANCING
 	// TODO
 	LAYOUT_FIELD(FShaderResourceParameter, InstanceBufferParameter);
 	LAYOUT_FIELD(FShaderParameter, LodViewOriginParameter);

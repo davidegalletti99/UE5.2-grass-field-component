@@ -11,6 +11,10 @@
 #define CUBIC_BEZ(p0, p1, p2, p3, t) (lerp(QUAD_BEZ(p0, p1, p2, t), QUAD_BEZ(p1, p2, p3, t), t))
 #define GAUSSIAN_MAP(m, s, x) (exp(-(x - m)*(x - m) / (2 * s * s)) / (s * SQ_2_PI))
 
+#define IDENTITY_MATRIX_3X3 float3x3( \
+        float3(1, 0, 0), \
+        float3(0, 1, 0), \
+        float3(0, 0, 1))
 
 #define IDENTITY_MATRIX_4X4 float4x4( \
         float4(1, 0, 0, 0), \
@@ -29,6 +33,11 @@
         float4(         0,           0, 1, 0), \
         float4(         0,           0, 0, 1))
 
+
+#define SKEW_SYMMETRIC_CROSS_PRODUCT_MATRIX_3X3(vec) float3x3( \
+        float3(    0, -vec.z,  vec.y), \
+        float3(vec.z,      0, -vec.x), \
+        float3(vec.y,  vec.x,      0))
 
 #define SKEW_SYMMETRIC_CROSS_PRODUCT_MATRIX_4X4(vec) float4x4( \
         float4(    0, -vec.z,  vec.y, 0), \
@@ -118,20 +127,9 @@ struct FGrassVertex
     float4 TangentZ; // TangentZ.w contains sign of tangent basis determinant
 };
 
-struct FPackedGrassInstance
-{
-    float3 Origin;
-    uint HeightAndWidth;
-    uint Facing;
-    int Hash;
-};
-
 struct FGrassInstance
 {
-    float3 Origin;
-    float2 Facing;
-    float Height;
-    float Width;
+    float4x4 Transform;
     int Hash;
 };
 
@@ -142,7 +140,7 @@ struct FGrassInstance
  */
 FPackedGrassData Pack(const FGrassData InData)
 {
-    FPackedGrassData OutData = (FPackedGrassData) 0;
+    FPackedGrassData OutData;
     
     // prendo i 4 bit medno significativi dall'esponente e 12 dalla mantissa
     // 0    7    f    f    f    8    0    0
@@ -201,24 +199,6 @@ FLodGrassData Unpack(const FPackedLodGrassData InData)
     OutData.Position = InData.Position;
     OutData.Hash = InData.Hash;
     OutData.LodLevel = InData.LodLevel;
-    
-    OutData.Height = asfloat((InData.HeightAndWidth & 0xffff0000) >> 1);
-    OutData.Width = asfloat((InData.HeightAndWidth & 0x0000ffff) << 15);
-    
-    const uint SignX = InData.Facing & 0x80000000;
-    const uint SignY = (InData.Facing & 0x00008000) << 16;
-    OutData.Facing.x = asfloat(SignX | (InData.Facing & 0x7fff0000) >> 1);
-    OutData.Facing.y = asfloat(SignY | (InData.Facing & 0x00007fff) << 15);
-    
-    return OutData;
-}
-
-FGrassInstance Unpack(const FPackedGrassInstance InData)
-{
-    FGrassInstance OutData = (FGrassInstance) 0;
-    
-    OutData.Origin = InData.Origin;
-    OutData.Hash = InData.Hash;
     
     OutData.Height = asfloat((InData.HeightAndWidth & 0xffff0000) >> 1);
     OutData.Width = asfloat((InData.HeightAndWidth & 0x0000ffff) << 15);
@@ -296,40 +276,50 @@ float4x4 ComputeA2BRotationMatrix(float3 A, float3 B)
     const float Sine = length(cross(A, B));
     const float Cosine = dot(A, B);
 
-    const float4x4 SkewMat = SKEW_SYMMETRIC_CROSS_PRODUCT_MATRIX_4X4(A);
-    const float4x4 IdentityMat = IDENTITY_MATRIX_4X4;
+    const float3x3 SkewMat = SKEW_SYMMETRIC_CROSS_PRODUCT_MATRIX_3X3(A);
     
-    return (IdentityMat + SkewMat + mul(SkewMat, SkewMat) * (1 - Cosine) / (Sine * Sine));
+    const float3x3 IdentityMat = IDENTITY_MATRIX_3X3;
+    const float3x3 RotationMat =  IdentityMat + SkewMat + mul(SkewMat, SkewMat) * ((1 - Cosine) / (Sine * Sine));
+    
+    return float4x4(
+            float4(RotationMat[0], 0),
+            float4(RotationMat[1], 0),
+            float4(RotationMat[2], 0),
+            float4(0, 0, 0, 1));
 }
 
-float4x4 ComputeTransformRotationMatrix(FGrassInstance InstanceData)
+float4x4 ComputeTransformRotationMatrix(FGrassData Data)
 {
-    // float CosAngle = dot(Facing, FORWARD_VECTOR.xy);
-    // float SinAngle =  sqrt(1 - CosAngle * CosAngle);
-    //
-    // float4x4 RotationMatrix = float4x4(
-    //         float4(CosAngle, -SinAngle, 0, 0),
-    //         float4(SinAngle,  CosAngle, 0, 0),
-    //         float4(       0,         0, 1, 0),
-    //         float4(       0,         0, 0, 1)
-    // );
-    return ComputeA2BRotationMatrix(FORWARD_VECTOR, float3(InstanceData.Facing, 0));
+    float CosAngle = dot(Data.Facing, FORWARD_VECTOR.xy);
+    float SinAngle =  sqrt(1 - CosAngle * CosAngle);
+    
+    float4x4 RotationMatrix = float4x4(
+            float4(CosAngle, -SinAngle, 0, 0),
+            float4(SinAngle,  CosAngle, 0, 0),
+            float4(       0,         0, 1, 0),
+            float4(       0,         0, 0, 1)
+    );
+    return RotationMatrix; // ComputeA2BRotationMatrix(-FORWARD_VECTOR, float3(InstanceData.Facing, 0));
 }
 
-float4x4 ComputeTransformMatrixNoScale(FGrassInstance InstanceData)
+float4x4 ComputeTransformMatrixNoScale(FGrassData Data)
 {
-    const float4x4 RotationMatrix = ComputeTransformRotationMatrix(InstanceData);
-    const float4x4 TranslationMatrix = TRANSLATION_MATRIX_4X4(InstanceData.Origin);
+    const float4x4 RotationMatrix = ComputeTransformRotationMatrix(Data);
+    const float4x4 TranslationMatrix = TRANSLATION_MATRIX_4X4(Data.Position);
     
     return mul(TranslationMatrix, RotationMatrix);
 }
 
-float4x4 ComputeTransformMatrix(FGrassInstance InstanceData)
+float4x4 ComputeTransformMatrix(FGrassData Data)
 {
-    const float4x4 NoScaleTransform = ComputeTransformMatrixNoScale(InstanceData);
-    const float4x4 ScaleMatrix = SCALE_MATRIX_4X4(float3(InstanceData.Width, InstanceData.Width, InstanceData.Height));
+    const float4x4 ScaleMatrix = SCALE_MATRIX_4X4(float3(Data.Width, Data.Width, Data.Height));
+    const float4x4 RotationMatrix = ComputeTransformRotationMatrix(Data);
+    const float4x4 TranslationMatrix = TRANSLATION_MATRIX_4X4(Data.Position);
+
+    const float4x4 ScaleAndRotation = mul(RotationMatrix, ScaleMatrix);
+    const float4x4 Result = mul(TranslationMatrix, ScaleAndRotation);
     
-    return mul(NoScaleTransform, ScaleMatrix);
+    return Result;
 }
 
 void ComputeFrustumPlanes(

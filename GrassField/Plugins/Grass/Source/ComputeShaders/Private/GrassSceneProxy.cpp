@@ -3,8 +3,6 @@
 
 #include "GrassSceneProxy.h"
 
-#include "PixelShaderUtils.h"
-
 /** Single global instance of the ISM renderer extension. */
 TGlobalResource<FGrassRendererExtension> GrassRendererExtension;
 
@@ -237,11 +235,7 @@ namespace GrassMesh
 			GraphBuilder.AllocParameters<FComputeGrassMesh_CS::FParameters>();
 		const FComputeGrassMesh_CS::FPermutationDomain PermutationVector;
 		const TShaderMapRef<FComputeGrassMesh_CS> ComputeShader(InGlobalShaderMap, PermutationVector);
-		
 
-#if USE_INSTANCING
-		PassParameters->RWInstanceBuffer = InOutputResources.InstanceBufferUAV;
-#endif
 		PassParameters->CameraPosition = InViewDesc.ViewOrigin;
 		PassParameters->ViewMatrix = InViewDesc.ViewMatrix;
 		PassParameters->RWCounter = InVolatileResources.CounterUAV;
@@ -249,8 +243,6 @@ namespace GrassMesh
 		PassParameters->RWVertexBuffer = InProxyDesc.VertexBuffer->VertexBufferUAV;
 		PassParameters->RWIndexBuffer = InProxyDesc.IndexBuffer->IndexBufferUAV;
 		PassParameters->RWIndirectArgsBuffer = InOutputResources.IndirectArgsBufferUAV;
-		PassParameters->IndirectArgsBuffer = InVolatileResources.IndirectArgsBuffer;
-		PassParameters->IndirectArgsBufferSRV = InVolatileResources.IndirectArgsBufferSRV;
 
 
 		const int32 GrassDataNum = InProxyDesc.GrassData->Num();
@@ -724,6 +716,7 @@ void FGrassRendererExtension::SubmitWork(FRDGBuilder& GraphBuilder)
 		WorkIndex++;
 	}
 
+	// TODO: Capire a cosa serve
 	// Add pass to transition all output buffers for reading
 	AddPass_TransitionAllDrawBuffers(GraphBuilder, Buffers, UsedBufferIndices, false);
 }

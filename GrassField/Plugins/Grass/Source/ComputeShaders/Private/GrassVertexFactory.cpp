@@ -148,8 +148,7 @@ void FGrassShaderParameters::GetElementShaderBindings(
 
 #define GRASS_FLAGS	  EVertexFactoryFlags::UsedWithMaterials \
 					| EVertexFactoryFlags::SupportsDynamicLighting \
-					| EVertexFactoryFlags::SupportsPrimitiveIdStream \
-					| EVertexFactoryFlags::SupportsNaniteRendering
+					| EVertexFactoryFlags::SupportsPrimitiveIdStream 
 
 IMPLEMENT_VERTEX_FACTORY_TYPE(FGrassVertexFactory, "/Shaders/GrassVertexFactory.ush", GRASS_FLAGS);
 

@@ -116,6 +116,22 @@ namespace GrassMesh // GrassShaders
 		}
 	};
 
+	/** InitInstanceBuffer compute shader. */
+	class COMPUTESHADERS_API FInitInstanceBuffer_CS : public FGlobalShader
+	{
+	public:
+		DECLARE_GLOBAL_SHADER(FInitInstanceBuffer_CS);
+		SHADER_USE_PARAMETER_STRUCT(FInitInstanceBuffer_CS, FGlobalShader);
+
+		BEGIN_SHADER_PARAMETER_STRUCT(FParameters, )
+			SHADER_PARAMETER_UAV(RWBuffer<uint>, RWIndirectArgsBuffer)
+		END_SHADER_PARAMETER_STRUCT()
+
+			static bool ShouldCompilePermutation(FGlobalShaderPermutationParameters const& Parameters)
+		{
+			return IsFeatureLevelSupported(Parameters.Platform, ERHIFeatureLevel::SM6);
+		}
+	};
 
 	class COMPUTESHADERS_API FCullGrassData_CS : public FGlobalShader
 	{
@@ -141,7 +157,6 @@ namespace GrassMesh // GrassShaders
 		}
 	};
 
-
 	class COMPUTESHADERS_API FComputeGrassMesh_CS : public FGlobalShader
 	{
 
@@ -162,8 +177,6 @@ namespace GrassMesh // GrassShaders
 			SHADER_PARAMETER_UAV(RWStructuredBuffer<uint32>, RWIndexBuffer)
 			SHADER_PARAMETER_UAV(RWStructuredBuffer<FGrassInstance>, RWInstanceBuffer)
 			SHADER_PARAMETER_UAV(RWStructuredBuffer<uint32>, RWIndirectArgsBuffer)
-			SHADER_PARAMETER_RDG_BUFFER_SRV(StructuredBuffer<uint32>, IndirectArgsBufferSRV)
-			RDG_BUFFER_ACCESS(IndirectArgsBuffer, ERHIAccess::IndirectArgs)
 		END_SHADER_PARAMETER_STRUCT()
 
 		static bool ShouldCompilePermutation(FGlobalShaderPermutationParameters const& Parameters)
@@ -172,20 +185,4 @@ namespace GrassMesh // GrassShaders
 		}
 	};
 
-	/** InitInstanceBuffer compute shader. */
-	class COMPUTESHADERS_API FInitInstanceBuffer_CS : public FGlobalShader
-	{
-	public:
-		DECLARE_GLOBAL_SHADER(FInitInstanceBuffer_CS);
-		SHADER_USE_PARAMETER_STRUCT(FInitInstanceBuffer_CS, FGlobalShader);
-
-		BEGIN_SHADER_PARAMETER_STRUCT(FParameters, )
-			SHADER_PARAMETER_UAV(RWBuffer<uint>, RWIndirectArgsBuffer)
-		END_SHADER_PARAMETER_STRUCT()
-
-			static bool ShouldCompilePermutation(FGlobalShaderPermutationParameters const& Parameters)
-		{
-			return IsFeatureLevelSupported(Parameters.Platform, ERHIFeatureLevel::SM6);
-		}
-	};
 }

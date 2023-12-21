@@ -3,8 +3,8 @@
 
 #include "GrassFieldComponent.h"
 
-// #include "GrassInstancingSceneProxy.h"
-#include "GrassSceneProxy.h"
+#include "GrassInstancingSceneProxy.h"
+// #include "GrassSceneProxy.h"
 
 UGrassMeshSection::UGrassMeshSection(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
@@ -80,7 +80,7 @@ FBoxSphereBounds UGrassFieldComponent::CalcBounds(const FTransform& LocalToWorld
 
 FPrimitiveSceneProxy* UGrassFieldComponent::CreateSceneProxy()
 {
-	FGrassSceneProxy* Proxy = new FGrassSceneProxy(this);
+	FGrassInstancingSceneProxy* Proxy = new FGrassInstancingSceneProxy(this);
 	return Proxy;
 }
 

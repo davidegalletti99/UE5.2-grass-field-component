@@ -3,7 +3,6 @@
 
 #include "GrassInstancingSceneProxy.h"
 
-
 /** Single global instance of the ISM renderer extension. */
 TGlobalResource<FGrassInstancingRendererExtension> GrassInstancingRendererExtension;
 
@@ -45,7 +44,7 @@ namespace GrassInstancingMesh
 		}
 		{
 			FRHIResourceCreateInfo CreateInfo(TEXT("FGrass.InstanceBuffer"));
-			constexpr int32 InstanceSize = sizeof(GrassMesh::FPackedGrassInstance);
+			constexpr int32 InstanceSize = sizeof(GrassMesh::FGrassInstance);
 			const int32 InstanceBufferSize = GrassDataNum * InstanceSize;
 			InBuffers.InstanceBuffer = RHICreateStructuredBuffer(InstanceSize, InstanceBufferSize, BUF_UnorderedAccess | BUF_ShaderResource, ERHIAccess::SRVMask, CreateInfo);
 			InBuffers.InstanceBufferUAV = RHICreateUnorderedAccessView(InBuffers.InstanceBuffer, PF_R32_UINT);
@@ -98,7 +97,7 @@ namespace GrassInstancingMesh
 		const int32 GrassDataNum = ProxyDesc.GrassData->Num();
 		{
 			OutResources.CulledGrassDataBuffer = GraphBuilder.CreateBuffer(
-				FRDGBufferDesc::CreateStructuredDesc(sizeof(GrassMesh::FPackedLodGrassData), GrassDataNum),
+				FRDGBufferDesc::CreateStructuredDesc(sizeof(GrassMesh::FPackedGrassData), GrassDataNum),
 				TEXT("GrassMesh.CulledGrassDataBuffer"));
 
 			OutResources.CulledGrassDataBufferUAV = GraphBuilder.CreateUAV(OutResources.CulledGrassDataBuffer);
@@ -227,6 +226,7 @@ namespace GrassInstancingMesh
 		const TShaderMapRef<GrassMesh::FCullInstancingGrassData_CS> ComputeShader(InGlobalShaderMap, PermutationVector);
 
 		PassParameters->VP_MATRIX = InViewDesc.ViewProjectionMatrix;
+		PassParameters->RWCounter = InVolatileResources.CounterUAV;
 		PassParameters->CameraPosition = InViewDesc.ViewOrigin;
 		PassParameters->CutoffDistance = ProxyDesc.CutoffDistance;
 		PassParameters->GrassDataSize = ProxyDesc.GrassData->Num();
@@ -273,7 +273,7 @@ namespace GrassInstancingMesh
 }
 
 FGrassInstancingSectionProxy::FGrassInstancingSectionProxy(const ERHIFeatureLevel::Type FeatureLevel)
-	: NumIndices(0), CutoffDistance(0), VertexFactory(FeatureLevel)
+	: VertexFactory(FeatureLevel)
 {
 }
 
@@ -442,7 +442,7 @@ void FGrassInstancingSceneProxy::GetDynamicMeshElements(
 						|| Distance > CutoffDistance)
 						continue;
 
-					IsMaxLod = Distance < CutoffDistance / 2;
+					IsMaxLod = Distance < 300;
 				}
 				
 				IndexBuffer = IsMaxLod ? &MaxLodIndexBuffer : &MinLodIndexBuffer;
@@ -472,16 +472,6 @@ void FGrassInstancingSceneProxy::GetDynamicMeshElements(
 				Mesh.bUseForMaterial = true;
 				Mesh.bUseForDepthPass = true;
 				
-				bool bHasPrecomputedVolumetricLightmap;
-				FMatrix PreviousLocalToWorld;
-				int32 SingleCaptureIndex;
-				bool bOutputVelocity;
-				GetScene().GetPrimitiveUniformShaderParameters_RenderThread(
-					GetPrimitiveSceneInfo(),
-					bHasPrecomputedVolumetricLightmap,
-					PreviousLocalToWorld,
-					SingleCaptureIndex,
-					bOutputVelocity);
 				
 				// TODO allow for non indirect instanced rendering
 				BatchElement.PrimitiveIdMode = EPrimitiveIdMode::PrimID_ForceZero;
@@ -495,9 +485,10 @@ void FGrassInstancingSceneProxy::GetDynamicMeshElements(
 				BatchElement.PrimitiveUniformBuffer = GetUniformBuffer();
 
 				FGrassInstancingUserData* UserData = &Collector.AllocateOneFrameResource<FGrassInstancingUserData>();
-				BatchElement.UserData = static_cast<void*>(UserData);
 				UserData->InstanceBufferSRV = Buffers.InstanceBufferSRV;
 				UserData->LodViewOrigin = static_cast<FVector3f>(MainView->ViewMatrices.GetViewOrigin()); // LWC_TODO: Precision Loss
+				
+				BatchElement.UserData = static_cast<void*>(UserData);
 
 #if !(UE_BUILD_SHIPPING || UE_BUILD_TEST)
 				// Support the freezerendering mode. Use any frozen view state for culling.
@@ -761,7 +752,7 @@ void FGrassInstancingRendererExtension::SubmitWork(FRDGBuilder& GraphBuilder)
 	}
 
 	// Add pass to transition all output buffers for reading
-	AddPass_TransitionAllDrawBuffers(GraphBuilder, Buffers, UsedBufferIndices, false);
+	// AddPass_TransitionAllDrawBuffers(GraphBuilder, Buffers, UsedBufferIndices, false);
 }
 // End FGrassInstancingRendererExtension implementations
 

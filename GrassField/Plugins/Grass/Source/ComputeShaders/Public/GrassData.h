@@ -4,8 +4,8 @@
 
 #include "VectorTypes.h"
 
-#ifndef USE_INSTANCING
-	#define USE_INSTANCING 0
+#ifndef My_USE_INSTANCING
+	#define My_USE_INSTANCING 0
 #endif // USE_INSTANCING
 
 namespace GrassMesh {
@@ -90,19 +90,9 @@ namespace GrassMesh {
 
 	struct COMPUTESHADERS_API FGrassInstance
 	{
-		FVector3f Origin;
-		FVector2f Facing;
+		float Transform[4][4];
 		int Hash;
-		float Height;
-		float Width;
-	};
-
-	struct COMPUTESHADERS_API FPackedGrassInstance
-	{
-		FVector3f Origin;
-		uint32 Facing;
-		int Hash;
-		uint32 HeightAndWidth;
+		
 	};
 
 	// TODO: Implementare packig e unpacking per i vertici
@@ -121,6 +111,15 @@ namespace GrassMesh {
 		FVector3f Position;
 		uint32 UV;
 	};
+	
+#define GRAVITATIONAL_ACCELERATION 9.81f
+
+	inline FVector3f MovePoint(const FVector3f Pi, const FVector3f Vi, const float T)
+	{
+		FVector3f P = Pi + Vi * T;
+		P.Z -= T * T * GRAVITATIONAL_ACCELERATION / 2;
+		return P;
+	}
 
 #define QUAD_BEZ(P0, P1, P2, T) (P0 * (1 - T) * (1 - T) + P1 * 2 * (1 - T) * T + P2 * T * T)
 	inline void CreateGrassModels(
@@ -129,33 +128,38 @@ namespace GrassMesh {
 	    uint32 LodStep)
 	{
 	    const float MaxHeight = 1.0f;
-	    const float MaxWidth = 0.5f;
+	    const float MaxWidth = 1.0f;
 	    
-	    const FVector3f InitialPosition = FVector3f(0, 0, 0);
-	    const FVector3f FinalPosition = FVector3f(0, 0, 1) * MaxHeight;
-	    const FVector2f Facing = FVector2f(0, 1);
-	    
-	    
-	    const float Angle = UE_PI * 0.1;
+		const FVector3f V0 = FVector3f(0, 0, FMath::Sqrt(2 * GRAVITATIONAL_ACCELERATION * MaxHeight));
+		const float Te = V0.Z / GRAVITATIONAL_ACCELERATION;
+		
+		const FVector3f InitialPosition = FVector3f(0, 0, 0);
+	    const FVector3f FinalPosition = MovePoint(InitialPosition, V0, V0.Z / GRAVITATIONAL_ACCELERATION);
+	    const FVector2f Facing = FVector2f(0, -1);
+		
+		
+	    constexpr float Angle = UE_PI * 0.1;
 	    const FVector3f Normal = FVector3f(Facing, 0);
+	    const FVector3f Tangent = Normal.Cross(FVector3f(0, 0, 1));
+		
 		const FVector3f Normal1 = Normal.RotateAngleAxis(Angle, FVector3f(0, 0, 1));
 		const FVector3f Normal2 = Normal.RotateAngleAxis(-Angle, FVector3f(0, 0, 1));
-	    const FVector3f Tangent = Normal.Cross(FVector3f(0, 0, 1));
-		const FVector3f Tangent1 = Normal1.Cross(FVector3f(0, 0, 1));
-		const FVector3f Tangent2 = Normal2.Cross(FVector3f(0, 0, 1));
+		
+		const FVector3f Tangent1 = Tangent.RotateAngleAxis(Angle, FVector3f(0, 0, 1));
+		const FVector3f Tangent2 = Tangent.RotateAngleAxis(-Angle, FVector3f(0, 0, 1));
 	    
 		VertexBuffer.AddZeroed(LodStep * 2 + 3);
-		IndexBuffer.AddZeroed((LodStep * 2 + 1) * 3);
+		IndexBuffer.AddZeroed((LodStep * 2 + 1) * 3 * 2);
 		
 	    uint32 VertexIndex = 0, PrimitiveIndex = 0;
-	    for (uint32 i = 0; i <= LodStep; i++, VertexIndex += 2, PrimitiveIndex += 6)
+	    for (uint32 i = 0; i <= LodStep; i++, VertexIndex += 2, PrimitiveIndex += 12)
 	    {
 
 	        const float Percentage = static_cast<float>(i) / (LodStep + 1);
-	        const float CurrentFactor = QUAD_BEZ(1, 1 * 0.85, 0, Percentage) / 2;
-	        const FVector3f CurrentPosition = QUAD_BEZ(InitialPosition, FinalPosition * 0.85, FinalPosition, Percentage);
+	        const float CurrentFactor = QUAD_BEZ(1, 1 * 0.85, 0, Percentage);
+	        const FVector3f CurrentPosition = MovePoint(InitialPosition, V0, Percentage * Te);
 	        
-	        const float CurrentHalfWidth = CurrentFactor * MaxWidth;
+	        const float CurrentHalfWidth = CurrentFactor * MaxWidth / 2;
 	        
 	        FGrassVertex P1, P2;
 	        P1.Position = CurrentPosition + Tangent * CurrentHalfWidth;
@@ -171,17 +175,32 @@ namespace GrassMesh {
 	        VertexBuffer[VertexIndex + 1] = P2;
 
 	        
-	        if (i < LodStep - 1)
+	        if (i < LodStep)
 	        {
 	            // t1
 	            IndexBuffer[PrimitiveIndex + 0] = VertexIndex + 0;
 	        	IndexBuffer[PrimitiveIndex + 1] = VertexIndex + 1;
 	        	IndexBuffer[PrimitiveIndex + 2] = VertexIndex + 3;
 	        	
+	        	
 	        	// t2
 	        	IndexBuffer[PrimitiveIndex + 3] = VertexIndex + 0;
 	        	IndexBuffer[PrimitiveIndex + 4] = VertexIndex + 3;
 	        	IndexBuffer[PrimitiveIndex + 5] = VertexIndex + 2;
+
+	        	
+
+	        	// t1
+	        	IndexBuffer[PrimitiveIndex + 6] = VertexIndex + 0;
+	        	IndexBuffer[PrimitiveIndex + 7] = VertexIndex + 3;
+	        	IndexBuffer[PrimitiveIndex + 8] = VertexIndex + 1;
+	        	
+	        	
+	        	// t2
+	        	IndexBuffer[PrimitiveIndex + 9] = VertexIndex + 0;
+	        	IndexBuffer[PrimitiveIndex + 10] = VertexIndex + 2;
+	        	IndexBuffer[PrimitiveIndex + 11] = VertexIndex + 3;
+	        	
 	        }
 	        else
 	        {
@@ -189,6 +208,10 @@ namespace GrassMesh {
 	        	IndexBuffer[PrimitiveIndex + 0] = VertexIndex + 0;
 	        	IndexBuffer[PrimitiveIndex + 1] = VertexIndex + 1;
 	        	IndexBuffer[PrimitiveIndex + 2] = VertexIndex + 2;
+	        	
+	        	IndexBuffer[PrimitiveIndex + 3] = VertexIndex + 0;
+	        	IndexBuffer[PrimitiveIndex + 4] = VertexIndex + 2;
+	        	IndexBuffer[PrimitiveIndex + 5] = VertexIndex + 1;
 	        }
 	    }
 	    
