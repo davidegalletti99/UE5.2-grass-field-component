@@ -16,7 +16,6 @@
 // --------------------------------------------------------------
 // ----------------- Compute Shader Declaration -----------------
 // --------------------------------------------------------------
-
 DECLARE_STATS_GROUP(TEXT("TerrainShader"), STATGROUP_TerrainShader, STATCAT_Advanced);
 DECLARE_CYCLE_STAT(TEXT("TerrainShader Execute"), STAT_TerrainShader_Execute, STATGROUP_TerrainShader);
 

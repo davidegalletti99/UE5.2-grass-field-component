@@ -4,10 +4,8 @@
 #include "GrassShaders.h"
 
 // Begin implementations
-IMPLEMENT_GLOBAL_SHADER(GrassMesh::FInitInstancingBuffers_CS, "/Shaders/GrassCompute.usf", "InitInstancingBuffersCS", SF_Compute);
-IMPLEMENT_GLOBAL_SHADER(GrassMesh::FInitInstancingInstanceBuffer_CS, "/Shaders/GrassCompute.usf", "InitInstancingIndirectArgsCS", SF_Compute);
-IMPLEMENT_GLOBAL_SHADER(GrassMesh::FCullInstancingGrassData_CS, "/Shaders/GrassCompute.usf", "CullInstancingGrassDataCS", SF_Compute);
-IMPLEMENT_GLOBAL_SHADER(GrassMesh::FComputeInstancingData_CS, "/Shaders/GrassCompute.usf", "ComputeInstancingDataCS", SF_Compute);
+IMPLEMENT_GLOBAL_SHADER(GrassMesh::FInitInstancingInstanceBuffer_CS, "/Shaders/GrassComputeInstancing.usf", "InitInstancingIndirectArgsCS", SF_Compute);
+IMPLEMENT_GLOBAL_SHADER(GrassMesh::FComputeInstanceGrassData_CS, "/Shaders/GrassComputeInstancing.usf", "ComputeInstanceGrassDataCS", SF_Compute);
 
 
 IMPLEMENT_GLOBAL_SHADER(GrassMesh::FInitBuffers_CS, "/Shaders/GrassCompute.usf", "InitBuffersCS", SF_Compute);

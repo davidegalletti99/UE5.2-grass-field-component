@@ -1,15 +1,15 @@
 #pragma once
 #include "/Engine/Public/Platform.ush"
-//#include "Noise.ush"
-float Rand1(const float n)
+
+float Rand1(const float N)
 {
-	return frac(sin(n) * 43758.5453123);
+	return frac(sin(N) * 43758.5453123);
 }
 
 float3 GetBaseColor(const float3 InBaseColor, const int Seed)
 {
-	const float T = Rand1(Seed);
-	const float Frac = lerp(0.18f, 1.0f, T);
+	//const float T = Rand1(Seed);
+	const float Frac = lerp(0.18f, 1.0f, Seed);
 	return InBaseColor * Frac;
 }
 

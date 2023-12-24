@@ -5,6 +5,7 @@
 #define PI 3.14159265359
 #define SQ_2_PI 2.50662827463
 #define FORWARD_VECTOR float3(0, 1, 0)
+#define BACKWARD_VECTOR float3(0, -1, 0)
 
 // Calcola la curva di Bézier quadratica
 #define QUAD_BEZ(p0, p1, p2, t) (lerp(p0, lerp(p1, p2, t), t))
@@ -35,15 +36,15 @@
 
 
 #define SKEW_SYMMETRIC_CROSS_PRODUCT_MATRIX_3X3(vec) float3x3( \
-        float3(    0, -vec.z,  vec.y), \
-        float3(vec.z,      0, -vec.x), \
-        float3(vec.y,  vec.x,      0))
+        float3(     0, -vec.z,  vec.y), \
+        float3( vec.z,      0, -vec.x), \
+        float3(-vec.y,  vec.x,      0))
 
 #define SKEW_SYMMETRIC_CROSS_PRODUCT_MATRIX_4X4(vec) float4x4( \
-        float4(    0, -vec.z,  vec.y, 0), \
-        float4(vec.z,      0, -vec.x, 0), \
-        float4(vec.y,  vec.x,      0, 0), \
-        float4(    0,      0,      0, 0))
+        float4(     0, -vec.z,  vec.y, 0), \
+        float4( vec.z,      0, -vec.x, 0), \
+        float4(-vec.y,  vec.x,      0, 0), \
+        float4(    0,      0,      0,  0))
 
 #define TRANSLATION_MATRIX_4X4(vec) float4x4( \
         float4(1, 0, 0, vec.x), \
@@ -271,15 +272,15 @@ float3 RotateZ(const float Angle, const float3 Vec)
     return mul(Rot, Vec);
 }
 
-float4x4 ComputeA2BRotationMatrix(float3 A, float3 B)
+// https://math.stackexchange.com/questions/180418/calculate-rotation-matrix-to-align-vector-a-to-vector-b-in-3d
+float4x4 ComputeA2BRotationMatrix(const float3 A, const float3 B)
 {
-    const float Sine = length(cross(A, B));
+    const float3 Vec = cross(A, B);
     const float Cosine = dot(A, B);
+    // const float Sine = length(Vec);
 
-    const float3x3 SkewMat = SKEW_SYMMETRIC_CROSS_PRODUCT_MATRIX_3X3(A);
-    
-    const float3x3 IdentityMat = IDENTITY_MATRIX_3X3;
-    const float3x3 RotationMat =  IdentityMat + SkewMat + mul(SkewMat, SkewMat) * ((1 - Cosine) / (Sine * Sine));
+    const float3x3 SkewMat = SKEW_SYMMETRIC_CROSS_PRODUCT_MATRIX_3X3(Vec);
+    const float3x3 RotationMat =  IDENTITY_MATRIX_3X3 + SkewMat + mul(SkewMat, SkewMat) * (1 / (1 + Cosine));
     
     return float4x4(
             float4(RotationMat[0], 0),
@@ -290,16 +291,13 @@ float4x4 ComputeA2BRotationMatrix(float3 A, float3 B)
 
 float4x4 ComputeTransformRotationMatrix(FGrassData Data)
 {
-    float CosAngle = dot(Data.Facing, FORWARD_VECTOR.xy);
-    float SinAngle =  sqrt(1 - CosAngle * CosAngle);
+    const float3 A = FORWARD_VECTOR;
+    const float3 B = float3(Data.Facing, 0);
     
-    float4x4 RotationMatrix = float4x4(
-            float4(CosAngle, -SinAngle, 0, 0),
-            float4(SinAngle,  CosAngle, 0, 0),
-            float4(       0,         0, 1, 0),
-            float4(       0,         0, 0, 1)
-    );
-    return RotationMatrix; // ComputeA2BRotationMatrix(-FORWARD_VECTOR, float3(InstanceData.Facing, 0));
+    if (A.x + B.x == 0 && A.y + B.y == 0)
+        return ROTATION_MATRIX_Z_4X4(PI * 0.5);
+    
+    return transpose(ComputeA2BRotationMatrix(A, B));
 }
 
 float4x4 ComputeTransformMatrixNoScale(FGrassData Data)
@@ -356,17 +354,16 @@ bool PlaneTestAABB(in float4 InPlanes[5], in const float3 InCenter, in const flo
 
 bool IsInViewFrustum(in const float3 Position, in const float4x4 ViewProjectionMatrix, in const float Margin)
 {
-    const float4 Position4 = float4(Position, 1.0f);
-    const float4 ViewSpace = mul(Position4, ViewProjectionMatrix);
+    // WordlSpace -> HomogenousSpace -> ViewSpace ( ClipSpace ) -> NDCSpace
+    const float4 HomogenousPosition = float4(Position, 1.0f);
+    const float4 ClipPosition = mul(HomogenousPosition, ViewProjectionMatrix);
     
-    float3 ClipSpace = ViewSpace.xyz;
-    ClipSpace /= ViewSpace.w;
-
-    ClipSpace.xy = ClipSpace.xy / 2.0f + 0.5f;
+    float3 NDCPosition = ClipPosition.xyz / ClipPosition.w;
+    NDCPosition.xy = NDCPosition.xy / 2.0f + 0.5f;
     
-    return ClipSpace.x >= 0.0f - Margin && ClipSpace.x <= 1.0f + Margin
-        && ClipSpace.y >= 0.0f - Margin && ClipSpace.y <= 1.0f + Margin
-        && ClipSpace.z >= 0.0f && ClipSpace.z <= 1.0f;
+    return NDCPosition.x >= 0.0f - Margin && NDCPosition.x <= 1.0f + Margin
+        && NDCPosition.y >= 0.0f - Margin && NDCPosition.y <= 1.0f + Margin
+        && NDCPosition.z >= 0.0f && NDCPosition.z <= 1.0f;
 }
 
 /**

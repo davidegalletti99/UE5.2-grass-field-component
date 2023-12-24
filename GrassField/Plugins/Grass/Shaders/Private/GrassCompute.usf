@@ -1,5 +1,7 @@
+# pragma once
 #include "/Engine/Private/Common.ush"
 #include "GrassUtils.ush"
+#include "Noise.ush"
 
 RWStructuredBuffer<uint> RWCounter;
 StructuredBuffer<uint> Counter;
@@ -16,9 +18,6 @@ StructuredBuffer<FPackedGrassData> GrassDataBuffer;
 // CulledGrassDataBuffer
 RWStructuredBuffer<FPackedLodGrassData> RWCulledGrassDataBuffer;
 StructuredBuffer<FPackedLodGrassData> CulledGrassDataBuffer;
-
-RWStructuredBuffer<FPackedGrassData> RWInstancingCulledGrassDataBuffer;
-StructuredBuffer<FPackedGrassData> InstancingCulledGrassDataBuffer;
 
 // Vertex Buffers
 RWStructuredBuffer<FGrassVertex> RWVertexBuffer;
@@ -37,93 +36,6 @@ RWStructuredBuffer<uint> RWIndirectArgsBuffer;
 RWStructuredBuffer<uint> IndirectArgsBufferSRV;
 
 uint NumIndices;
-
-/**
- * Compute shader to initialize all buffers.
- */
-[numthreads(1, 1, 1)]
-void InitInstancingBuffersCS()
-{
-    RWCounter[0] = 0;
-    RWCounter[1] = 0;
-    
-    // CullInstances indirect args
-    RWIndirectArgsBuffer[0] = 0; // Increment this wave counter during CullGrassDataCS.
-    RWIndirectArgsBuffer[1] = 0;
-    RWIndirectArgsBuffer[2] = 0;
-    RWIndirectArgsBuffer[3] = 0; // Increment this instance counter counter during CullGrassDataCS.
-}
-
-/**
- * Initialise the indirect args for the final culled indirect draw call.
- */
-[numthreads(1, 1, 1)]
-void InitInstancingIndirectArgsCS()
-{
-    RWIndirectArgsBuffer[0] = NumIndices;
-    RWIndirectArgsBuffer[1] = 0; // Increment this counter during ComputeGrassMeshCS.
-    RWIndirectArgsBuffer[2] = 0;
-    RWIndirectArgsBuffer[3] = 0;
-    RWIndirectArgsBuffer[4] = 0;
-}
-
-
-
-[numthreads(1024, 1, 1)]
-void CullInstancingGrassDataCS(
-    uint3 DispatchThreadId : SV_DispatchThreadID)
-{
-    const uint GrassIndex = DispatchThreadId.x;
-    if (GrassIndex >= GrassDataSize)
-        return;
-    
-    const FPackedGrassData Data = GrassDataBuffer[GrassIndex];
-    
-    const bool InView = IsInViewFrustum(Data.Position, VP_MATRIX, 0.2f);
-    const bool WithinDistance = distance(CameraPosition.xyz, Data.Position) < CutoffDistance;
-    
-    if (InView && WithinDistance)
-    {
-        FPackedGrassData OutData;
-        OutData.Position = Data.Position;
-        OutData.HeightAndWidth = Data.HeightAndWidth;
-        OutData.Facing = Data.Facing;
-        OutData.Hash = Data.Hash;
-        
-        uint WriteIndex;
-        InterlockedAdd(RWCounter[0], 1, WriteIndex);
-        RWInstancingCulledGrassDataBuffer[WriteIndex] = OutData;
-
-    }
-}
-
-[numthreads(1024, 1, 1)]
-void ComputeInstancingDataCS(
-    uint3 DispatchThreadId : SV_DispatchThreadID)
-{
-    const uint GrassIndex = DispatchThreadId.x;
-    if (GrassIndex >= Counter[0])
-        return;
-
-    const FGrassData Data = Unpack(InstancingCulledGrassDataBuffer[GrassIndex]);
-    
-    FGrassInstance Instance;
-    Instance.Transform = transpose(ComputeTransformMatrix(Data));
-    Instance.Hash = Data.Hash;
-    
-    int WriteIndex;
-    InterlockedAdd(RWIndirectArgsBuffer[1], 1, WriteIndex);
-    RWInstanceBuffer[WriteIndex] = Instance;
-}
-
-
-
-
-
-
-
-
-// -------------------------------------------------------------------------------------------------------
 
 /**
  * Compute shader to initialize all buffers.
@@ -214,7 +126,7 @@ void CreateGrassBlade(const FLodGrassData Data)
     const float3 Tangent2 = cross(Normal2, float3(0, 0, 1));
     for (uint i = 0; i < LodSteps; i++, VertexId += 2, IndexId += 6)
     {
-        const float Percent = float(i) / (LodSteps);
+        const float Percent = float(i) / (LodSteps + 1);
         const float T = Percent * Te;
         const float3 P = MovePoint(P0, V0, T);
         const float Thickness = QUAD_BEZ(Width, Width * 0.85, 0, Percent);

@@ -106,11 +106,25 @@ namespace GrassMesh {
 		// FPackedNormal TangentZ;
 	};
 
-	struct COMPUTESHADERS_API FPackedGrassVertex
+	// struct COMPUTESHADERS_API FPackedGrassVertex
+	// {
+	// 	FVector3f Position;
+	// 	uint32 UV;
+	// };
+
+	inline float ComputeLodIndex(
+		const FSceneView* View,
+		const FBox& Bounds,
+		const float CutoffDistance,
+		const FUintVector2 MinMaxLod)
 	{
-		FVector3f Position;
-		uint32 UV;
-	};
+		float Distance = FVector::DistXY(View->CullingOrigin, Bounds.GetCenter());
+		Distance -= FVector::DistXY(FVector::Zero(), Bounds.GetExtent());
+		
+		const float LodPercentage = (Distance / CutoffDistance);
+		const uint32 Lod = FMath::Clamp(FMath::Lerp(MinMaxLod.X, MinMaxLod.Y, LodPercentage), MinMaxLod.X, MinMaxLod.Y);
+		return Lod;
+	}
 	
 #define GRAVITATIONAL_ACCELERATION 9.81f
 
@@ -135,8 +149,7 @@ namespace GrassMesh {
 		
 		const FVector3f InitialPosition = FVector3f(0, 0, 0);
 	    const FVector3f FinalPosition = MovePoint(InitialPosition, V0, V0.Z / GRAVITATIONAL_ACCELERATION);
-	    const FVector2f Facing = FVector2f(0, -1);
-		
+	    const FVector2f Facing = FVector2f(0, 1);
 		
 	    constexpr float Angle = UE_PI * 0.1;
 	    const FVector3f Normal = FVector3f(Facing, 0);
@@ -149,10 +162,10 @@ namespace GrassMesh {
 		const FVector3f Tangent2 = Tangent.RotateAngleAxis(-Angle, FVector3f(0, 0, 1));
 	    
 		VertexBuffer.AddZeroed(LodStep * 2 + 3);
-		IndexBuffer.AddZeroed((LodStep * 2 + 1) * 3 * 2);
+		IndexBuffer.AddZeroed((LodStep * 2 + 1) * 3);
 		
 	    uint32 VertexIndex = 0, PrimitiveIndex = 0;
-	    for (uint32 i = 0; i <= LodStep; i++, VertexIndex += 2, PrimitiveIndex += 12)
+	    for (uint32 i = 0; i <= LodStep; i++, VertexIndex += 2, PrimitiveIndex += 6)
 	    {
 
 	        const float Percentage = static_cast<float>(i) / (LodStep + 1);
@@ -162,13 +175,13 @@ namespace GrassMesh {
 	        const float CurrentHalfWidth = CurrentFactor * MaxWidth / 2;
 	        
 	        FGrassVertex P1, P2;
-	        P1.Position = CurrentPosition + Tangent * CurrentHalfWidth;
+	        P1.Position = CurrentPosition - Tangent * CurrentHalfWidth;
 	        P1.UV = FVector2f(0.5 - CurrentFactor, Percentage);
 	        P1.TangentX = Tangent1;
 	        P1.TangentZ = FVector4f(Normal1, 1);
 	    	VertexBuffer[VertexIndex + 0] = P1;
 
-	        P2.Position = CurrentPosition - Tangent * CurrentHalfWidth;
+	        P2.Position = CurrentPosition + Tangent * CurrentHalfWidth;
 	        P2.UV = FVector2f(0.5 + CurrentFactor, Percentage);
 	        P2.TangentX = Tangent2;
 	        P2.TangentZ = FVector4f(Normal2, 1);
@@ -179,39 +192,21 @@ namespace GrassMesh {
 	        {
 	            // t1
 	            IndexBuffer[PrimitiveIndex + 0] = VertexIndex + 0;
-	        	IndexBuffer[PrimitiveIndex + 1] = VertexIndex + 1;
-	        	IndexBuffer[PrimitiveIndex + 2] = VertexIndex + 3;
-	        	
+	        	IndexBuffer[PrimitiveIndex + 1] = VertexIndex + 3;
+	        	IndexBuffer[PrimitiveIndex + 2] = VertexIndex + 1;
 	        	
 	        	// t2
 	        	IndexBuffer[PrimitiveIndex + 3] = VertexIndex + 0;
-	        	IndexBuffer[PrimitiveIndex + 4] = VertexIndex + 3;
-	        	IndexBuffer[PrimitiveIndex + 5] = VertexIndex + 2;
-
-	        	
-
-	        	// t1
-	        	IndexBuffer[PrimitiveIndex + 6] = VertexIndex + 0;
-	        	IndexBuffer[PrimitiveIndex + 7] = VertexIndex + 3;
-	        	IndexBuffer[PrimitiveIndex + 8] = VertexIndex + 1;
-	        	
-	        	
-	        	// t2
-	        	IndexBuffer[PrimitiveIndex + 9] = VertexIndex + 0;
-	        	IndexBuffer[PrimitiveIndex + 10] = VertexIndex + 2;
-	        	IndexBuffer[PrimitiveIndex + 11] = VertexIndex + 3;
-	        	
+	        	IndexBuffer[PrimitiveIndex + 4] = VertexIndex + 2;
+	        	IndexBuffer[PrimitiveIndex + 5] = VertexIndex + 3;
 	        }
 	        else
 	        {
 	        	// last triangle
 	        	IndexBuffer[PrimitiveIndex + 0] = VertexIndex + 0;
-	        	IndexBuffer[PrimitiveIndex + 1] = VertexIndex + 1;
-	        	IndexBuffer[PrimitiveIndex + 2] = VertexIndex + 2;
+	        	IndexBuffer[PrimitiveIndex + 1] = VertexIndex + 2;
+	        	IndexBuffer[PrimitiveIndex + 2] = VertexIndex + 1;
 	        	
-	        	IndexBuffer[PrimitiveIndex + 3] = VertexIndex + 0;
-	        	IndexBuffer[PrimitiveIndex + 4] = VertexIndex + 2;
-	        	IndexBuffer[PrimitiveIndex + 5] = VertexIndex + 1;
 	        }
 	    }
 	    

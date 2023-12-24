@@ -64,28 +64,31 @@ protected:
 		UMaterialInterface* Material = nullptr;
 
 	UPROPERTY(EditAnywhere, Category = Rendering)
-		uint32 Dimension = 2;
+		uint32 Dimension = 3;
 
 	UPROPERTY(EditAnywhere, Category = Rendering)
 		AActor* Terrain = nullptr;
 
 	UPROPERTY(EditAnywhere, Category = Rendering)
-		float Lambda = 3.0f;
-
-	UPROPERTY(EditAnywhere, Category = Rendering)
 		float CutoffDistance = 1000.0f;
 
 	UPROPERTY(EditAnywhere, Category = Rendering)
-		int32 Density = 10;
+		float Density = 200;
 
 	UPROPERTY(EditAnywhere, Category = Rendering)
-		int32 Displacement = 8;
+		float Displacement = 10;
 
 	UPROPERTY(EditAnywhere, Category = Rendering)
-		int32 MaxHeight = 12;
+		float MaxHeight = 12;
 
 	UPROPERTY(EditAnywhere, Category = Rendering)
-		int32 MinHeight = 7;
+		float MinHeight = 7;
+	
+	UPROPERTY(EditAnywhere, Category = Rendering)
+		float MaxWidth = 1.5;
+
+	UPROPERTY(EditAnywhere, Category = Rendering)
+		float MinWidth = 1;
 
 	UPROPERTY(EditAnywhere, Category = Rendering)
 		FUintVector2 LodStepsRange = FUintVector2(1, 7);

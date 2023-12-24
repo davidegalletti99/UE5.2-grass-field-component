@@ -1,0 +1,60 @@
+# pragma once
+#include "/Engine/Private/Common.ush"
+#include "GrassUtils.ush"
+#include "Noise.ush"
+
+uint NumIndices;
+
+uint GrassDataSize;
+float4x4 VP_MATRIX;
+float CutoffDistance;
+float3 CameraPosition;
+
+// GrassDataBuffer
+StructuredBuffer<FPackedGrassData> GrassDataBuffer;
+
+// InstanceBuffer
+RWStructuredBuffer<FGrassInstance> RWInstanceBuffer;
+
+// IndirectArgsBuffer
+RWStructuredBuffer<uint> RWIndirectArgsBuffer;
+
+/**
+ * Initialise the indirect args for the final culled indirect draw call.
+ */
+[numthreads(1, 1, 1)]
+void InitInstancingIndirectArgsCS()
+{
+    RWIndirectArgsBuffer[0] = NumIndices;
+    RWIndirectArgsBuffer[1] = 0; // Increment this counter during ComputeGrassMeshCS.
+    RWIndirectArgsBuffer[2] = 0;
+    RWIndirectArgsBuffer[3] = 0;
+    RWIndirectArgsBuffer[4] = 0;
+}
+
+
+
+[numthreads(1024, 1, 1)]
+void ComputeInstanceGrassDataCS(
+    uint3 DispatchThreadId : SV_DispatchThreadID)
+{
+    const uint GrassIndex = DispatchThreadId.x;
+    if (GrassIndex >= GrassDataSize)
+        return;
+    
+    FGrassData Data = Unpack(GrassDataBuffer[GrassIndex]);
+    
+    const bool InView = IsInViewFrustum(Data.Position, VP_MATRIX, 0.2f);
+    const bool WithinDistance = distance(CameraPosition.xyz, Data.Position) < CutoffDistance;
+    
+    if (InView && WithinDistance)
+    {
+        FGrassInstance Instance;
+        Instance.Transform = transpose(ComputeTransformMatrix(Data));
+        Instance.Hash = rand3dTo1d(Data.Position) * 0xffffffff;
+    
+        uint WriteIndex;
+        InterlockedAdd(RWIndirectArgsBuffer[1], 1, WriteIndex);
+        RWInstanceBuffer[WriteIndex] = Instance;
+    }
+}

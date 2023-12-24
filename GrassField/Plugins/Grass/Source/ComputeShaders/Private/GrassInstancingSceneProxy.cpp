@@ -94,29 +94,14 @@ namespace GrassInstancingMesh
 		const FMainViewDesc& InMainViewDesc,
 		FVolatileResources& OutResources)
 	{
-		const int32 GrassDataNum = ProxyDesc.GrassData->Num();
-		{
-			OutResources.CulledGrassDataBuffer = GraphBuilder.CreateBuffer(
-				FRDGBufferDesc::CreateStructuredDesc(sizeof(GrassMesh::FPackedGrassData), GrassDataNum),
-				TEXT("GrassMesh.CulledGrassDataBuffer"));
-
-			OutResources.CulledGrassDataBufferUAV = GraphBuilder.CreateUAV(OutResources.CulledGrassDataBuffer);
-			OutResources.CulledGrassDataBufferSRV = GraphBuilder.CreateSRV(OutResources.CulledGrassDataBuffer);
-		}
-		{
-			OutResources.Counter = GraphBuilder.CreateBuffer(
-				FRDGBufferDesc::CreateStructuredDesc(sizeof(uint32), 2),
-				TEXT("GrassMesh.Counter"));
-			OutResources.CounterUAV = GraphBuilder.CreateUAV(OutResources.Counter);
-			OutResources.CounterSRV = GraphBuilder.CreateSRV(OutResources.Counter);
-		}
-		{
-			OutResources.IndirectArgsBuffer = GraphBuilder.CreateBuffer(
-				FRDGBufferDesc::CreateIndirectDesc<FRHIDrawIndirectParameters /*FRHIDrawIndexedIndirectParameters*/>(IndirectArgsByteSize),
-				TEXT("GrassMesh.IndirectArgsBuffer"));
-			OutResources.IndirectArgsBufferUAV = GraphBuilder.CreateUAV(OutResources.IndirectArgsBuffer);
-			OutResources.IndirectArgsBufferSRV = GraphBuilder.CreateSRV(OutResources.IndirectArgsBuffer);
-		}
+		// const int32 GrassDataNum = ProxyDesc.GrassData->Num();
+		// {
+		// 	OutResources.Counter = GraphBuilder.CreateBuffer(
+		// 		FRDGBufferDesc::CreateStructuredDesc(sizeof(uint32), 2),
+		// 		TEXT("GrassMesh.Counter"));
+		// 	OutResources.CounterUAV = GraphBuilder.CreateUAV(OutResources.Counter);
+		// 	OutResources.CounterSRV = GraphBuilder.CreateSRV(OutResources.Counter);
+		// }
 	}
 
 	/** Transition our output draw buffers for use. Read or write access is set according to the bToWrite parameter. */
@@ -168,28 +153,7 @@ namespace GrassInstancingMesh
 				}
 			});
 	}
-
-	/** Initialize the buffers before collecting visible grass points. */
-	void AddPass_InitBuffers(
-		FRDGBuilder& GraphBuilder,
-		FGlobalShaderMap* InGlobalShaderMap,
-		FVolatileResources& InVolatileResources)
-	{
-		TShaderMapRef<GrassMesh::FInitInstancingBuffers_CS> ComputeShader(InGlobalShaderMap);
-
-		GrassMesh::FInitInstancingBuffers_CS::FParameters* PassParameters =
-			GraphBuilder.AllocParameters<GrassMesh::FInitInstancingBuffers_CS::FParameters>();
-
-		PassParameters->RWIndirectArgsBuffer = InVolatileResources.IndirectArgsBufferUAV;
-		PassParameters->RWCounter = InVolatileResources.CounterUAV;
-
-		FComputeShaderUtils::AddPass<GrassMesh::FInitInstancingBuffers_CS>(
-			GraphBuilder,
-			RDG_EVENT_NAME("InitBuffers"),
-			ComputeShader,
-			PassParameters,
-			FIntVector(1, 1, 1));
-	}
+	
 
 	/** Initialise the draw indirect buffer. */
 	void AddPass_InitIndirectArgs(
@@ -212,7 +176,7 @@ namespace GrassInstancingMesh
 	}
 
 	/** Cull quads and write to the final output buffer. */
-	void AddPass_CullGrassData(
+	void AddPass_ComputeInstanceData(
 		FRDGBuilder& GraphBuilder,
 		FGlobalShaderMap* InGlobalShaderMap,
 		FVolatileResources& InVolatileResources,
@@ -220,54 +184,25 @@ namespace GrassInstancingMesh
 		const FProxyDesc& ProxyDesc,
 		const FMainViewDesc& InViewDesc)
 	{
-		GrassMesh::FCullInstancingGrassData_CS::FParameters* PassParameters =
-			GraphBuilder.AllocParameters<GrassMesh::FCullInstancingGrassData_CS::FParameters>();
-		const GrassMesh::FCullInstancingGrassData_CS::FPermutationDomain PermutationVector;
-		const TShaderMapRef<GrassMesh::FCullInstancingGrassData_CS> ComputeShader(InGlobalShaderMap, PermutationVector);
+		GrassMesh::FComputeInstanceGrassData_CS::FParameters* PassParameters =
+			GraphBuilder.AllocParameters<GrassMesh::FComputeInstanceGrassData_CS::FParameters>();
+		const GrassMesh::FComputeInstanceGrassData_CS::FPermutationDomain PermutationVector;
+		const TShaderMapRef<GrassMesh::FComputeInstanceGrassData_CS> ComputeShader(InGlobalShaderMap, PermutationVector);
 
 		PassParameters->VP_MATRIX = InViewDesc.ViewProjectionMatrix;
-		PassParameters->RWCounter = InVolatileResources.CounterUAV;
 		PassParameters->CameraPosition = InViewDesc.ViewOrigin;
 		PassParameters->CutoffDistance = ProxyDesc.CutoffDistance;
 		PassParameters->GrassDataSize = ProxyDesc.GrassData->Num();
 		PassParameters->GrassDataBuffer = InOutputResources.GrassDataBufferSRV;
-		PassParameters->RWInstancingCulledGrassDataBuffer = InVolatileResources.CulledGrassDataBufferUAV;
-		PassParameters->RWIndirectArgsBuffer = InVolatileResources.IndirectArgsBufferUAV;
+		PassParameters->RWInstanceBuffer = InOutputResources.InstanceBufferUAV;
+		PassParameters->RWIndirectArgsBuffer = InOutputResources.IndirectArgsBufferUAV;
 
 
 		const int32 GrassDataNum = ProxyDesc.GrassData->Num();
 		const FIntVector GroupCount = FIntVector(FMath::CeilToInt(GrassDataNum / 1024.0f), 1, 1);
-		FComputeShaderUtils::AddPass<GrassMesh::FCullInstancingGrassData_CS>(
+		FComputeShaderUtils::AddPass<GrassMesh::FComputeInstanceGrassData_CS>(
 			GraphBuilder,
 			RDG_EVENT_NAME("CullGrassData"),
-			ComputeShader, PassParameters, GroupCount);
-	}
-
-	void AddPass_ComputeInstancingData(
-		FRDGBuilder& GraphBuilder,
-		FGlobalShaderMap* InGlobalShaderMap,
-		FVolatileResources& InVolatileResources,
-		FPersistentBuffers& InOutputResources,
-		const FProxyDesc& InProxyDesc,
-		const FChildViewDesc& InViewDesc)
-	{
-		GrassMesh::FComputeInstancingData_CS::FParameters* PassParameters =
-			GraphBuilder.AllocParameters<GrassMesh::FComputeInstancingData_CS::FParameters>();
-		const GrassMesh::FComputeInstancingData_CS::FPermutationDomain PermutationVector;
-		const TShaderMapRef<GrassMesh::FComputeInstancingData_CS> ComputeShader(InGlobalShaderMap, PermutationVector);
-
-		PassParameters->Counter = InVolatileResources.CounterSRV;
-		PassParameters->InstancingCulledGrassDataBuffer = InVolatileResources.CulledGrassDataBufferSRV;
-		PassParameters->RWInstanceBuffer = InOutputResources.InstanceBufferUAV;
-		PassParameters->RWIndirectArgsBuffer = InOutputResources.IndirectArgsBufferUAV;
-		PassParameters->IndirectArgsBufferSRV = InVolatileResources.IndirectArgsBufferSRV;
-
-
-		const int32 GrassDataNum = InProxyDesc.GrassData->Num();
-		const FIntVector GroupCount = FIntVector(FMath::CeilToInt(GrassDataNum / 1024.0f), 1, 1);
-		FComputeShaderUtils::AddPass(
-			GraphBuilder,
-			RDG_EVENT_NAME("ComputeInstancingData"),
 			ComputeShader, PassParameters, GroupCount);
 	}
 }
@@ -340,23 +275,27 @@ void FGrassInstancingSceneProxy::OnTransformChanged()
 void FGrassInstancingSceneProxy::CreateRenderThreadResources()
 {
 	check(IsInRenderingThread());
-	
-	GrassMesh::CreateGrassModels(MinLodVertexBuffer.Vertices, MinLodIndexBuffer.Indices, MinMaxLodSteps.X);
-	GrassMesh::CreateGrassModels(MaxLodVertexBuffer.Vertices, MaxLodIndexBuffer.Indices, MinMaxLodSteps.Y);
-
-	GrassInstancingMesh::InitOrUpdateResource(&MinLodVertexBuffer);
-	GrassInstancingMesh::InitOrUpdateResource(&MinLodIndexBuffer);
-	GrassInstancingMesh::InitOrUpdateResource(&MaxLodVertexBuffer);
-	GrassInstancingMesh::InitOrUpdateResource(&MaxLodIndexBuffer);
-	
+	bool bIsDataLoaded = true;
 	for (const auto& Section: Sections)
 	{
-		const uint32 GrassDataNum = Section->GrassData.Num();
-		if (GrassDataNum <= 0)
-			continue;
+		bIsDataLoaded = bIsDataLoaded && Section->GrassData.Num() > 0;
+
+		if (!bIsDataLoaded)
+			return;
+	}
+	
+	for (uint32 LodIndex = MinMaxLodSteps.X; LodIndex <= MinMaxLodSteps.Y; LodIndex++)
+	{
+		FGrassMeshLodData* Lod = new FGrassMeshLodData(LodIndex);
+		Lod->InitResources();
+		Lods.Add(LodIndex, Lod);
 		
+	}
+
+	for (const auto& Section: Sections)
+	{
 		FGrassInstancingVertexFactory* VertexFactory = &Section->VertexFactory;
-		VertexFactory->SetData(&MinLodVertexBuffer);
+		VertexFactory->SetData(Lods[MinMaxLodSteps.X]->VertexBuffer);
 		
 		GrassInstancingMesh::InitOrUpdateResource(VertexFactory);
 	}
@@ -365,18 +304,8 @@ void FGrassInstancingSceneProxy::CreateRenderThreadResources()
 void FGrassInstancingSceneProxy::DestroyRenderThreadResources()
 {
 	check(IsInRenderingThread());
-
-	MinLodIndexBuffer.ReleaseResource();
-	MinLodVertexBuffer.ReleaseResource();
-	MaxLodIndexBuffer.ReleaseResource();
-	MaxLodVertexBuffer.ReleaseResource();
 	
-	for (int i = 0; i < Sections.Num(); i++)
-	{
-		const auto& Section = Sections[i];
-		delete Section;
-	}
-	
+	Lods.Empty();
 	Sections.Empty();
 }
 
@@ -399,6 +328,67 @@ FPrimitiveViewRelevance FGrassInstancingSceneProxy::GetViewRelevance(const FScen
 	return Result;
 }
 
+void FGrassInstancingSceneProxy::AddMesh(
+	FMeshElementCollector& Collector,
+	const FSceneViewFamily& ViewFamily,
+	const int32 ViewIndex,
+	const FGrassMeshLodData* Lod,
+	FGrassInstancingSectionProxy* Section) const
+{
+	const FSceneView* MainView = ViewFamily.Views[0];
+	const FSceneView* CullView = ViewFamily.Views[ViewIndex];
+
+	const GrassInstancingMesh::FPersistentBuffers Buffers =
+					GrassInstancingRendererExtension.AddWork(Section, MainView, CullView);
+	
+	FMeshBatch& Mesh = Collector.AllocateMesh();
+	Mesh.Elements.SetNumZeroed(1);
+	FMeshBatchElement& BatchElement = Mesh.Elements[0];
+	
+	Mesh.ReverseCulling = IsLocalToWorldDeterminantNegative();
+	Mesh.VertexFactory = &Section->VertexFactory;
+	Mesh.MaterialRenderProxy = Material;
+	Mesh.Type = EPrimitiveType::PT_TriangleList;
+	Mesh.DepthPriorityGroup = ESceneDepthPriorityGroup::SDPG_World;
+	
+	Mesh.bWireframe = AllowDebugViewmodes() && ViewFamily.EngineShowFlags.Wireframe;
+	Mesh.bUseWireframeSelectionColoring = IsSelected();
+	Mesh.bCanApplyViewModeOverrides = false;
+	Mesh.CastRayTracedShadow = true;
+	Mesh.CastShadow = true;
+	Mesh.bUseForMaterial = true;
+	Mesh.bUseForDepthPass = true;
+	
+	
+	// TODO allow for non indirect instanced rendering
+	BatchElement.PrimitiveIdMode = EPrimitiveIdMode::PrimID_ForceZero;
+	BatchElement.IndexBuffer = Lod->IndexBuffer;
+	BatchElement.IndirectArgsBuffer = Buffers.IndirectArgsBuffer;
+	BatchElement.IndirectArgsOffset = 0;
+	BatchElement.FirstIndex = 0;
+	BatchElement.NumPrimitives = 0;
+	BatchElement.MinVertexIndex = 0;
+	BatchElement.MaxVertexIndex = 0;
+	
+	BatchElement.PrimitiveUniformBuffer = GetUniformBuffer();
+
+	FGrassInstancingUserData* UserData = &Collector.AllocateOneFrameResource<FGrassInstancingUserData>();
+	UserData->InstanceBufferSRV = Buffers.InstanceBufferSRV;
+	UserData->LodViewOrigin = static_cast<FVector3f>(MainView->ViewMatrices.GetViewOrigin()); // LWC_TODO: Precision Loss
+	
+	BatchElement.UserData = static_cast<void*>(UserData);
+
+#if !(UE_BUILD_SHIPPING || UE_BUILD_TEST)
+	// Support the freezerendering mode. Use any frozen view state for culling.
+	const FViewMatrices* FrozenViewMatrices = MainView->State != nullptr ? MainView->State->GetFrozenViewMatrices() : nullptr;
+	if (FrozenViewMatrices != nullptr)
+	{
+		UserData->LodViewOrigin = static_cast<FVector3f>(FrozenViewMatrices->GetViewOrigin());
+	}
+#endif
+	Collector.AddMesh(ViewIndex, Mesh);
+}
+
 void FGrassInstancingSceneProxy::GetDynamicMeshElements(
 	const TArray<const FSceneView*>& Views,
 	const FSceneViewFamily& ViewFamily,
@@ -417,7 +407,6 @@ void FGrassInstancingSceneProxy::GetDynamicMeshElements(
 		return;
 	}
 
-	const bool bWireframe = AllowDebugViewmodes() && ViewFamily.EngineShowFlags.Wireframe;
 	const FGrassInstancingIndexBuffer* IndexBuffer = nullptr;
 	const FGrassInstancingVertexBuffer* VertexBuffer = nullptr;
 	bool IsMaxLod = false;
@@ -437,68 +426,22 @@ void FGrassInstancingSceneProxy::GetDynamicMeshElements(
 				{
 					float Distance = FVector::DistXY(View->CullingOrigin, Section->Bounds.GetCenter());
 					Distance -= FVector::DistXY(FVector::Zero(), Section->Bounds.GetExtent());
-					
+                    
 					if (!View->ViewFrustum.IntersectBox(Section->Bounds.GetCenter(), Section->Bounds.GetExtent())
 						|| Distance > CutoffDistance)
 						continue;
 
-					IsMaxLod = Distance < 300;
 				}
 				
-				IndexBuffer = IsMaxLod ? &MaxLodIndexBuffer : &MinLodIndexBuffer;
-				VertexBuffer = IsMaxLod ? &MaxLodVertexBuffer : &MinLodVertexBuffer;
+				const uint32 LodIndex = GrassMesh::ComputeLodIndex(
+					Views[ViewIndex], Section->Bounds,
+					CutoffDistance, MinMaxLodSteps);
+				
+				Section->NumIndices = Lods[LodIndex]->NumIndices;
+				Section->VertexFactory.SetData(Lods[LodIndex]->VertexBuffer);
 
-				Section->NumIndices = IndexBuffer->Indices.Num();
-				Section->VertexFactory.SetData(VertexBuffer);
-
-				GrassInstancingMesh::FPersistentBuffers Buffers =
-					GrassInstancingRendererExtension.AddWork(Section, MainView, View);
+				AddMesh(Collector, ViewFamily, ViewIndex, Lods[LodIndex], Section);
 				
-				FMeshBatch& Mesh = Collector.AllocateMesh();
-				Mesh.Elements.SetNumZeroed(1);
-				FMeshBatchElement& BatchElement = Mesh.Elements[0];
-				
-				Mesh.ReverseCulling = IsLocalToWorldDeterminantNegative();
-				Mesh.VertexFactory = &Section->VertexFactory;
-				Mesh.MaterialRenderProxy = Material;
-				Mesh.Type = EPrimitiveType::PT_TriangleList;
-				Mesh.DepthPriorityGroup = ESceneDepthPriorityGroup::SDPG_World;
-				
-				Mesh.bWireframe = bWireframe;
-				Mesh.bUseWireframeSelectionColoring = IsSelected();
-				Mesh.bCanApplyViewModeOverrides = false;
-				Mesh.CastRayTracedShadow = true;
-				Mesh.CastShadow = true;
-				Mesh.bUseForMaterial = true;
-				Mesh.bUseForDepthPass = true;
-				
-				
-				// TODO allow for non indirect instanced rendering
-				BatchElement.PrimitiveIdMode = EPrimitiveIdMode::PrimID_ForceZero;
-				BatchElement.IndexBuffer = IndexBuffer;
-				BatchElement.IndirectArgsBuffer = Buffers.IndirectArgsBuffer;
-				BatchElement.IndirectArgsOffset = 0;
-				BatchElement.FirstIndex = 0;
-				BatchElement.NumPrimitives = 0;
-				BatchElement.MinVertexIndex = 0;
-				BatchElement.MaxVertexIndex = 0;
-				BatchElement.PrimitiveUniformBuffer = GetUniformBuffer();
-
-				FGrassInstancingUserData* UserData = &Collector.AllocateOneFrameResource<FGrassInstancingUserData>();
-				UserData->InstanceBufferSRV = Buffers.InstanceBufferSRV;
-				UserData->LodViewOrigin = static_cast<FVector3f>(MainView->ViewMatrices.GetViewOrigin()); // LWC_TODO: Precision Loss
-				
-				BatchElement.UserData = static_cast<void*>(UserData);
-
-#if !(UE_BUILD_SHIPPING || UE_BUILD_TEST)
-				// Support the freezerendering mode. Use any frozen view state for culling.
-				const FViewMatrices* FrozenViewMatrices = MainView->State != nullptr ? MainView->State->GetFrozenViewMatrices() : nullptr;
-				if (FrozenViewMatrices != nullptr)
-				{
-					UserData->LodViewOrigin = static_cast<FVector3f>(FrozenViewMatrices->GetViewOrigin());
-				}
-#endif
-				Collector.AddMesh(ViewIndex, Mesh);
 			}
 		}
 	}
@@ -679,8 +622,8 @@ void FGrassInstancingRendererExtension::SubmitWork(FRDGBuilder& GraphBuilder)
 	}
 
 	TMap<FGrassInstancingSectionProxy*, GrassInstancingMesh::FProxyDesc> Proxy2Desc;
-	TMap<const FSceneView*, GrassInstancingMesh::FMainViewDesc> MainViewsSet;
-	TMap<const FSceneView*, GrassInstancingMesh::FChildViewDesc> CullViewsSet;
+	TMap<const FSceneView*, GrassInstancingMesh::FMainViewDesc> MainView2Desc;
+	TMap<const FSceneView*, GrassInstancingMesh::FChildViewDesc> ChildViewView2Desc;
 	
 	// Iterate workloads and submit work
 	const int32 NumWorkItems = WorkDescs.Num();
@@ -699,7 +642,7 @@ void FGrassInstancingRendererExtension::SubmitWork(FRDGBuilder& GraphBuilder)
 		
 		// Gather data per main view
 		const FSceneView* MainView = MainViews[WorkDescs[WorkIndex].MainViewIndex];
-		GrassInstancingMesh::FMainViewDesc MainViewDesc = MainViewsSet.FindOrAdd(MainView);
+		GrassInstancingMesh::FMainViewDesc MainViewDesc = MainView2Desc.FindOrAdd(MainView);
 		if (!MainViewDesc.IsValid)
 		{
 			GrassInstancingMesh::FViewData MainViewData;
@@ -718,16 +661,14 @@ void FGrassInstancingRendererExtension::SubmitWork(FRDGBuilder& GraphBuilder)
 			ProxyDesc, MainViewDesc, VolatileResources);
 
 		// Build graph
-		GrassInstancingMesh::AddPass_InitBuffers(GraphBuilder, GetGlobalShaderMap(GMaxRHIFeatureLevel), VolatileResources);
-		// Build graph
-		GrassInstancingMesh::AddPass_CullGrassData(
+		GrassInstancingMesh::AddPass_ComputeInstanceData(
 			GraphBuilder, GetGlobalShaderMap(GMaxRHIFeatureLevel),
 			VolatileResources, Buffers[WorkDescs[WorkIndex].BufferIndex],
 			ProxyDesc, MainViewDesc);
 
 		// Gather data per child view
 		const FSceneView* CullView = CullViews[WorkDescs[WorkIndex].CullViewIndex];
-		GrassInstancingMesh::FChildViewDesc ChildViewDesc = CullViewsSet.FindOrAdd(CullView);
+		GrassInstancingMesh::FChildViewDesc ChildViewDesc = ChildViewView2Desc.FindOrAdd(CullView);
 		if (!ChildViewDesc.IsValid)
 		{
 			GrassInstancingMesh::FViewData CullViewData;
@@ -741,11 +682,6 @@ void FGrassInstancingRendererExtension::SubmitWork(FRDGBuilder& GraphBuilder)
 			ChildViewDesc.ViewProjectionMatrix = ChildViewDesc.bIsMainView ? MainViewDesc.ViewProjectionMatrix : FMatrix44f(CullViewData.ViewProjectionMatrix);
 			ChildViewDesc.ViewOrigin = ChildViewDesc.bIsMainView ? MainViewDesc.ViewOrigin : FVector3f(CullViewData.ViewOrigin);
 		}
-		
-		GrassInstancingMesh::AddPass_ComputeInstancingData(
-			GraphBuilder, GetGlobalShaderMap(GMaxRHIFeatureLevel),
-			VolatileResources, Buffers[WorkDescs[WorkIndex].BufferIndex],
-			ProxyDesc, ChildViewDesc);
 		
 
 		WorkIndex++;

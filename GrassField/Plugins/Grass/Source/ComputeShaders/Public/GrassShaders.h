@@ -17,24 +17,7 @@ namespace GrassMesh // GrassShaders
 	// ************************************************************************************************************** //
 	// ********************************************* Compute Shaders ************************************************ //
 	// ************************************************************************************************************** //
-/** Compute shader to initialize all buffers, including adding the lowest mip page(s) to the QuadBuffer. */
-	class COMPUTESHADERS_API FInitInstancingBuffers_CS : public FGlobalShader
-	{
-	public:
-		DECLARE_GLOBAL_SHADER(FInitInstancingBuffers_CS);
-		SHADER_USE_PARAMETER_STRUCT(FInitInstancingBuffers_CS, FGlobalShader);
-
-		BEGIN_SHADER_PARAMETER_STRUCT(FParameters, )
-			SHADER_PARAMETER_RDG_BUFFER_UAV(RWStructuredBuffer<uint32>, RWIndirectArgsBuffer)
-			SHADER_PARAMETER_RDG_BUFFER_UAV(RWStructuredBuffer<uint32>, RWCounter)
-		END_SHADER_PARAMETER_STRUCT()
-
-		static bool ShouldCompilePermutation(FGlobalShaderPermutationParameters const& Parameters)
-		{
-			return IsFeatureLevelSupported(Parameters.Platform, ERHIFeatureLevel::SM6);
-		}
-	};
-
+	
 	/** InitInstanceBuffer compute shader. */
 	class COMPUTESHADERS_API FInitInstancingInstanceBuffer_CS : public FGlobalShader
 	{
@@ -53,12 +36,12 @@ namespace GrassMesh // GrassShaders
 		}
 	};
 
-	class COMPUTESHADERS_API FCullInstancingGrassData_CS : public FGlobalShader
+	class COMPUTESHADERS_API FComputeInstanceGrassData_CS : public FGlobalShader
 	{
 
 	public:
-		DECLARE_GLOBAL_SHADER(FCullInstancingGrassData_CS);
-		SHADER_USE_PARAMETER_STRUCT(FCullInstancingGrassData_CS, FGlobalShader);
+		DECLARE_GLOBAL_SHADER(FComputeInstanceGrassData_CS);
+		SHADER_USE_PARAMETER_STRUCT(FComputeInstanceGrassData_CS, FGlobalShader);
 
 		BEGIN_SHADER_PARAMETER_STRUCT(FParameters, )
 			SHADER_PARAMETER(FVector3f, CameraPosition)
@@ -66,30 +49,8 @@ namespace GrassMesh // GrassShaders
 			SHADER_PARAMETER(float, CutoffDistance)
 			SHADER_PARAMETER(FMatrix44f, VP_MATRIX)
 			SHADER_PARAMETER_SRV(StructuredBuffer<FPackedGrassData>, GrassDataBuffer)
-			SHADER_PARAMETER_RDG_BUFFER_UAV(RWStructuredBuffer<FPackedGrassData>, RWInstancingCulledGrassDataBuffer)
-			SHADER_PARAMETER_RDG_BUFFER_UAV(RWStructuredBuffer<uint32>, RWIndirectArgsBuffer)
-			SHADER_PARAMETER_RDG_BUFFER_UAV(RWStructuredBuffer<uint32>, RWCounter)
-		END_SHADER_PARAMETER_STRUCT()
-
-		static bool ShouldCompilePermutation(FGlobalShaderPermutationParameters const& Parameters)
-		{
-			return IsFeatureLevelSupported(Parameters.Platform, ERHIFeatureLevel::SM6);
-		}
-	};
-
-	class COMPUTESHADERS_API FComputeInstancingData_CS : public FGlobalShader
-	{
-
-	public:
-		DECLARE_GLOBAL_SHADER(FComputeInstancingData_CS);
-		SHADER_USE_PARAMETER_STRUCT(FComputeInstancingData_CS, FGlobalShader);
-
-		BEGIN_SHADER_PARAMETER_STRUCT(FParameters, )
-			SHADER_PARAMETER_RDG_BUFFER_SRV(StructuredBuffer<uint32>, Counter)
-			SHADER_PARAMETER_RDG_BUFFER_SRV(StructuredBuffer<FPackedGrassData>, InstancingCulledGrassDataBuffer)
 			SHADER_PARAMETER_UAV(RWStructuredBuffer<FGrassInstance>, RWInstanceBuffer)
 			SHADER_PARAMETER_UAV(RWStructuredBuffer<uint32>, RWIndirectArgsBuffer)
-			SHADER_PARAMETER_RDG_BUFFER_SRV(StructuredBuffer<uint32>, IndirectArgsBufferSRV)
 		END_SHADER_PARAMETER_STRUCT()
 
 		static bool ShouldCompilePermutation(FGlobalShaderPermutationParameters const& Parameters)
@@ -97,6 +58,7 @@ namespace GrassMesh // GrassShaders
 			return IsFeatureLevelSupported(Parameters.Platform, ERHIFeatureLevel::SM6);
 		}
 	};
+
 	// -------------------------------------------------------------------------------------------------------------- //
 	/** Compute shader to initialize all buffers, including adding the lowest mip page(s) to the QuadBuffer. */
 	class COMPUTESHADERS_API FInitBuffers_CS : public FGlobalShader

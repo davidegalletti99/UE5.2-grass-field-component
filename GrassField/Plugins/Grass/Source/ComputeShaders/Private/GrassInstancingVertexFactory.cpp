@@ -125,7 +125,7 @@ bool FGrassInstancingVertexFactory::ShouldCompilePermutation(const FVertexFactor
 
 void FGrassInstancingVertexFactory::ModifyCompilationEnvironment(const FVertexFactoryShaderPermutationParameters &Parameters, FShaderCompilerEnvironment &OutEnvironment)
 {
-	OutEnvironment.SetDefine(TEXT("USE_INSTANCING"), 1);
+	OutEnvironment.SetDefine(TEXT("USE_INSTANCING"), true);
 }
 
 void FGrassInstancingVertexFactory::ValidateCompiledResult(
@@ -134,7 +134,6 @@ void FGrassInstancingVertexFactory::ValidateCompiledResult(
 	const FShaderParameterMap &ParameterMap, 
 	TArray<FString> &OutErrors)
 {
-
 }
 
 void FGrassInstancingShaderParameters::Bind(const FShaderParameterMap& ParameterMap)
@@ -169,8 +168,7 @@ void FGrassInstancingShaderParameters::GetElementShaderBindings(
 
 #define GRASS_FLAGS	  EVertexFactoryFlags::UsedWithMaterials \
 					| EVertexFactoryFlags::SupportsDynamicLighting \
-					| EVertexFactoryFlags::SupportsPrimitiveIdStream \
-					| EVertexFactoryFlags::SupportsNaniteRendering
+					| EVertexFactoryFlags::SupportsPrimitiveIdStream
 
 IMPLEMENT_VERTEX_FACTORY_TYPE(FGrassInstancingVertexFactory, "/Shaders/GrassVertexFactory.ush", GRASS_FLAGS);
 

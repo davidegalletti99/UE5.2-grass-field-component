@@ -104,14 +104,6 @@ namespace GrassInstancingMesh
 		FRDGBufferRef Counter;
 		FRDGBufferUAVRef CounterUAV;
 		FRDGBufferSRVRef CounterSRV;
-
-		FRDGBufferRef CulledGrassDataBuffer;
-		FRDGBufferUAVRef CulledGrassDataBufferUAV;
-		FRDGBufferSRVRef CulledGrassDataBufferSRV;
-
-		FRDGBufferRef IndirectArgsBuffer;
-		FRDGBufferUAVRef IndirectArgsBufferUAV;
-		FRDGBufferSRVRef IndirectArgsBufferSRV;
 	};
 }
 
@@ -142,6 +134,55 @@ public:
 	FGrassInstancingVertexFactory VertexFactory;
 };
 
+struct COMPUTESHADERS_API FGrassMeshLodData
+{
+	uint8 Steps = 0;
+	uint32 NumIndices = 1;
+	uint32 NumVertices = 3;
+
+	
+	FGrassInstancingIndexBuffer* IndexBuffer;
+	FGrassInstancingVertexBuffer* VertexBuffer;
+
+	FGrassMeshLodData()
+		: IndexBuffer(nullptr)
+		, VertexBuffer(nullptr)
+	{
+		
+	}
+
+	explicit FGrassMeshLodData(const uint8 Steps)
+		: Steps(Steps)
+	{
+		IndexBuffer = new FGrassInstancingIndexBuffer();
+		VertexBuffer = new FGrassInstancingVertexBuffer();
+
+		CreateGrassModels(VertexBuffer->Vertices, IndexBuffer->Indices, Steps);
+		
+		NumIndices = IndexBuffer->Indices.Num();
+		NumVertices = VertexBuffer->Vertices.Num();
+
+	}
+
+	~FGrassMeshLodData()
+	{
+		if (IndexBuffer->IsInitialized())
+			IndexBuffer->ReleaseResource();
+
+		if (VertexBuffer->IsInitialized())
+			VertexBuffer->ReleaseResource();
+		
+		delete VertexBuffer;
+		delete IndexBuffer;
+	}
+
+	void InitResources() const
+	{
+		IndexBuffer->InitResource();
+		VertexBuffer->InitResource();
+	}
+};
+
 class COMPUTESHADERS_API FGrassInstancingSceneProxy final : public FPrimitiveSceneProxy
 {
 public:
@@ -161,7 +202,13 @@ protected:
 	virtual FPrimitiveViewRelevance GetViewRelevance(const FSceneView *View) const override;
 	virtual void GetDynamicMeshElements(const TArray<const FSceneView *> &Views, const FSceneViewFamily &ViewFamily, uint32 VisibilityMap, FMeshElementCollector &Collector) const override;
 	//~ End FPrimitiveSceneProxy Interface
-	
+
+	void AddMesh(
+	FMeshElementCollector& Collector,
+	const FSceneViewFamily& ViewFamily,
+	int32 ViewIndex,
+	const FGrassMeshLodData* Lod,
+	FGrassInstancingSectionProxy* Section) const;
 	
 private:
 	void BuildOcclusionVolumes(TArrayView<FVector2D> const &InMinMaxData, FIntPoint const &InMinMaxSize, TArrayView<int32> const &InMinMaxMips, int32 InNumLods);
@@ -174,12 +221,9 @@ public:
 	FMaterialRelevance MaterialRelevance;
 
 	FUintVector2 MinMaxLodSteps;
+
 	
-	FGrassInstancingVertexBuffer MinLodVertexBuffer;
-	FGrassInstancingIndexBuffer MinLodIndexBuffer;
-	
-	FGrassInstancingVertexBuffer MaxLodVertexBuffer;
-	FGrassInstancingIndexBuffer MaxLodIndexBuffer;
+	TMap<uint8, FGrassMeshLodData*> Lods;
 
 	float CutoffDistance;
 	TArray<FGrassInstancingSectionProxy*> Sections;

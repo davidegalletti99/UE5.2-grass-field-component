@@ -75,9 +75,6 @@ typedef TUniformBufferRef<FGrassInstancingParameters> FGrassInstancingBufferRef;
 class FGrassInstancingVertexFactory : public FVertexFactory
 {
 	DECLARE_VERTEX_FACTORY_TYPE(FGrassInstancingVertexFactory);
-	// USE_INSTANCING permutation class
-	class FUseInstancingVSPermutationDomain : SHADER_PERMUTATION_BOOL("USE_INSTANCING");
-	using FPermutationDomain = TShaderPermutationDomain<FUseInstancingVSPermutationDomain>;
 	
 public:
 	explicit FGrassInstancingVertexFactory(const ERHIFeatureLevel::Type InFeatureLevel);

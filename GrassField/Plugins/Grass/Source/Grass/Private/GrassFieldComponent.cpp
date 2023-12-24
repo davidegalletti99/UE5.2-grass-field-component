@@ -111,6 +111,7 @@ void UGrassFieldComponent::EmptyGrassData()
 
 void UGrassFieldComponent::UpdateRenderThread()
 {
+	
 	MarkRenderStateDirty();
 }
 
@@ -148,7 +149,7 @@ void UGrassFieldComponent::InitSections()
 
 			UGrassMeshSection* Section = NewObject<UGrassMeshSection>();
 			FBox Box = FBox(PMin, PMax);
-			DrawDebugBox(GetWorld(), Box.GetCenter(), Box.GetExtent(), FColor::Red, false, 10, 0, 10);
+			DrawDebugBox(GetWorld(), Box.GetCenter(), Box.GetExtent(), FColor::Red, false, 15, 0, 10);
 			Section->SetBounds(Box);
 			Sections.Add(Section);
 		}
@@ -171,7 +172,6 @@ void UGrassFieldComponent::SampleGrassData()
 		for (float i = 0; i < Density; i++)
 		{
 			FVector Offset = (FMath::VRand() - 0.5) * Displacement;
-			FVector Facing = (FMath::VRand() - 0.5);
 			
 			FVector Start = p + FVector(Offset.X, Offset.Y, 10);
 			FVector End = p + FVector(Offset.X, Offset.Y, -10);
@@ -181,8 +181,11 @@ void UGrassFieldComponent::SampleGrassData()
 				if (FMath::Abs(Vertex.Normal.Dot(FVector(0, 0, 1))) <= 0.8)
 					continue;
 				
-				const float Height = FMath::Lerp(MinHeight, MaxHeight, FMath::SRand());
-				const float Width = FMath::Lerp(MinHeight, MaxHeight, FMath::SRand()) * 0.02;
+				FVector2f Facing = FVector2f(FVector3f(FMath::VRand() - 0.5));
+				Facing.Normalize();
+				const float Extraction = FMath::SRand();
+				const float Height = Extraction * (MaxHeight - MinHeight) + MinHeight;
+				const float Width = Extraction * (MaxWidth - MinWidth) + MinWidth;
 				
 				GrassMesh::FPackedGrassData GrassPoint
 				{
@@ -192,6 +195,7 @@ void UGrassFieldComponent::SampleGrassData()
 					Height,
 					Width
 				};
+				
 				for (auto& Section : Sections)
 					if(Section->AddGrassData(GrassPoint))
 						break;
