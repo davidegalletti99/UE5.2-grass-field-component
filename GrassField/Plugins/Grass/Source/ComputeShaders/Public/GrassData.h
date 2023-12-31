@@ -110,7 +110,7 @@ namespace GrassMesh {
 	// {
 	// 	FVector3f Position;
 	// 	uint32 UV;
-	// };
+	// }
 
 	inline float ComputeLodIndex(
 		const FSceneView* View,
@@ -121,13 +121,14 @@ namespace GrassMesh {
 		float Distance = FVector::DistXY(View->CullingOrigin, Bounds.GetCenter());
 		Distance -= FVector::DistXY(FVector::Zero(), Bounds.GetExtent());
 		
-		const float LodPercentage = (Distance / CutoffDistance);
+		const float LodPercentage = 1 - (Distance / CutoffDistance);
 		const uint32 Lod = FMath::Clamp(FMath::Lerp(MinMaxLod.X, MinMaxLod.Y, LodPercentage), MinMaxLod.X, MinMaxLod.Y);
 		return Lod;
 	}
 	
 #define GRAVITATIONAL_ACCELERATION 9.81f
-
+#define QUAD_BEZ(P0, P1, P2, T) ( FMath::Lerp(P0, FMath::Lerp(P1, P2, T), T) )
+	
 	inline FVector3f MovePoint(const FVector3f Pi, const FVector3f Vi, const float T)
 	{
 		FVector3f P = Pi + Vi * T;
@@ -135,7 +136,6 @@ namespace GrassMesh {
 		return P;
 	}
 
-#define QUAD_BEZ(P0, P1, P2, T) (P0 * (1 - T) * (1 - T) + P1 * 2 * (1 - T) * T + P2 * T * T)
 	inline void CreateGrassModels(
 	    TResourceArray<FGrassVertex>& VertexBuffer,
 	    TResourceArray<uint32>& IndexBuffer,

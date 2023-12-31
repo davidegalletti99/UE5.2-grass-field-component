@@ -16,7 +16,7 @@ float3 GetBaseColor(const float3 InBaseColor, const int Seed)
 float3 ComputeLightingParams(in const float Percent, inout float Specular, inout float Roughness, inout float AmbientOcclusion)
 {
 	AmbientOcclusion = Percent * Percent;
-	Specular = lerp(0, 0.3f, AmbientOcclusion);
+	Specular = lerp(0, 0.1f, AmbientOcclusion);
 	Specular *= Specular;
 	Roughness = lerp(1.0f, 0.5f, AmbientOcclusion);
 	

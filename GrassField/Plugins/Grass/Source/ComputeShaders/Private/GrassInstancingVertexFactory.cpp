@@ -16,6 +16,7 @@
 #include "ShaderParameterUtils.h"
 
 IMPLEMENT_GLOBAL_SHADER_PARAMETER_STRUCT(FGrassInstancingParameters, "GrassInstancingParams");
+IMPLEMENT_TYPE_LAYOUT(FGrassInstancingShaderParameters);
 
 
 void FGrassInstancingVertexBuffer::InitRHI()
@@ -87,7 +88,7 @@ void FGrassInstancingVertexFactory::InitRHI()
 	check(Streams.Num() == 0);
 	
 	UniformBuffer = FGrassInstancingBufferRef::CreateUniformBufferImmediate(Params, UniformBuffer_MultiFrame);
-	
+
 	FVertexDeclarationElementList Elements;
 	if (Data.PositionComponent.VertexBuffer != nullptr)
 		Elements.Add(AccessStreamComponent(Data.PositionComponent, 0));
@@ -172,7 +173,4 @@ void FGrassInstancingShaderParameters::GetElementShaderBindings(
 
 IMPLEMENT_VERTEX_FACTORY_TYPE(FGrassInstancingVertexFactory, "/Shaders/GrassVertexFactory.ush", GRASS_FLAGS);
 
-IMPLEMENT_TYPE_LAYOUT(FGrassInstancingShaderParameters);
-
 IMPLEMENT_VERTEX_FACTORY_PARAMETER_TYPE(FGrassInstancingVertexFactory, SF_Vertex, FGrassInstancingShaderParameters);
-IMPLEMENT_VERTEX_FACTORY_PARAMETER_TYPE(FGrassInstancingVertexFactory, SF_Pixel, FGrassInstancingShaderParameters);

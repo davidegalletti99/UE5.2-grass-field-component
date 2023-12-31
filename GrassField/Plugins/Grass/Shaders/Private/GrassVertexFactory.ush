@@ -21,7 +21,9 @@ float3 LodViewOrigin;
 #include "Noise.ush"
 
 
-
+// *********************************************************************************************************************
+// ****************************************** Vertex Factory Structures ************************************************
+// *********************************************************************************************************************
 /** Per-vertex inputs. No vertex buffers are bound. */
 struct FVertexFactoryInput
 {
@@ -36,7 +38,10 @@ struct FVertexFactoryInput
     uint VertexId : SV_VertexID;
 };
 
-/** Cached intermediates that would otherwise have to be computed multiple times. Avoids relying on the compiler to optimize out redundant operations. */
+/**
+ * Cached intermediates that would otherwise have to be computed multiple times. Avoids relying on the compiler
+ * to optimize out redundant operations.
+ */
 struct FVertexFactoryIntermediates
 {
     half3x3 TangentToLocal;
@@ -55,7 +60,9 @@ struct FVertexFactoryIntermediates
 #endif // USE_INSTANCING
 };
 
-/** Attributes to interpolate from the vertex shader to the pixel shader. */
+/**
+ * Attributes to interpolate from the vertex shader to the pixel shader.
+ */
 struct FVertexFactoryInterpolantsVSToPS
 {
     TANGENTTOWORLD_INTERPOLATOR_BLOCK
@@ -70,11 +77,26 @@ struct FVertexFactoryInterpolantsVSToPS
 #endif
 };
 
+// *********************************************************************************************************************
+// ****************************************** Vertex Factory Utilities *************************************************
+// *********************************************************************************************************************
+
+/**
+ * Get the instance data from the vertex factory input.
+ */
 FInstanceSceneData GetInstanceData(FVertexFactoryIntermediates Intermediates)
 {
     return Intermediates.SceneData.InstanceData;
 }
 
+FPrimitiveSceneData GetPrimitiveData(FVertexFactoryIntermediates Intermediates)
+{
+    return Intermediates.SceneData.Primitive;
+}
+
+/**
+ * Set the primitive ID in the interpolants
+ */
 void SetPrimitiveId(inout FVertexFactoryInterpolantsVSToPS Interpolants, uint PrimitiveId)
 {
 #if VF_USE_PRIMITIVE_SCENE_DATA
@@ -82,22 +104,45 @@ void SetPrimitiveId(inout FVertexFactoryInterpolantsVSToPS Interpolants, uint Pr
 #endif
 }
 
-void SetTangents(inout FVertexFactoryInterpolantsVSToPS Interpolants, float3 InTangentToWorld0, float3 InTangentToWorld2, float InTangentToWorldSign)
+uint GetPrimitiveId(FVertexFactoryInterpolantsVSToPS Interpolants)
+{
+#if VF_USE_PRIMITIVE_SCENE_DATA
+    return Interpolants.PrimitiveId;
+#else
+    return 0;
+#endif
+}
+
+/**
+ * Set the tangent basis in the interpolants
+ */
+void SetTangents(inout FVertexFactoryInterpolantsVSToPS Interpolants,
+    float3 InTangentToWorld0, float3 InTangentToWorld2,
+    float InTangentToWorldSign)
 {
     Interpolants.TangentToWorld0 = float4(InTangentToWorld0, 0);
     Interpolants.TangentToWorld2 = float4(InTangentToWorld2, InTangentToWorldSign);
 }
 
+/**
+ * Get the Z axis from the tangent basis.
+ */
 float4 GetTangentToWorld2(FVertexFactoryInterpolantsVSToPS Interpolants)
 {
     return Interpolants.TangentToWorld2;
 }
 
+/**
+ * Get the X axis from the tangent basis.
+ */
 float4 GetTangentToWorld0(FVertexFactoryInterpolantsVSToPS Interpolants)
 {
     return Interpolants.TangentToWorld0;
 }
 
+/**
+ * Calculate the tangent to world matrix from the vertex factory intermediates.
+ */
 half3x3 CalcTangentToWorldNoScale(FVertexFactoryIntermediates Intermediates, half3x3 TangentToLocal)
 {
     half3x3 LocalToWorld = LWCToFloat3x3(GetInstanceData(Intermediates).LocalToWorld);
@@ -130,11 +175,6 @@ half3x3 CalcTangentToLocal(FVertexFactoryInput Input, inout float TangentSign)
 }
 
 #if USE_INSTANCING
-
-float GetInstanceRandom(FVertexFactoryIntermediates Intermediates)
-{
-    return rand4dTo1d(Intermediates.InstanceOrigin);
-}
 
 half3x3 GetInstanceToLocal3x3(FVertexFactoryIntermediates Intermediates)
 {
@@ -180,23 +220,6 @@ half3x3 CalcTangentToWorld(FVertexFactoryIntermediates Intermediates, half3x3 Ta
     return TangentToWorld;
 }
 
-
-uint GetPrimitiveId(FVertexFactoryInterpolantsVSToPS Interpolants)
-{
-    return Interpolants.PrimitiveId;
-}
-
-/** Get ID in the GPU Scene. */
-uint VertexFactoryGetPrimitiveId(FVertexFactoryInterpolantsVSToPS Interpolants)
-{
-    return GetPrimitiveId(Interpolants);
-}
-
-FPrimitiveSceneData GetPrimitiveData(FVertexFactoryIntermediates Intermediates)
-{
-    return Intermediates.SceneData.Primitive;
-}
-
 #if NUM_TEX_COORD_INTERPOLATORS
 
 void SetUV(inout FVertexFactoryInterpolantsVSToPS Interpolants, uint UVIndex, float2 InValue)
@@ -219,11 +242,19 @@ float2 GetUV(FVertexFactoryInterpolantsVSToPS Interpolants, uint UVIndex)
 }
 #endif
 
+// *********************************************************************************************************************
+// ****************************************** Vertex Factory Interface *************************************************
+// *********************************************************************************************************************
+
+/** Get ID in the GPU Scene. */
+uint VertexFactoryGetPrimitiveId(FVertexFactoryInterpolantsVSToPS Interpolants)
+{
+    return GetPrimitiveId(Interpolants);
+}
 
 /** Compute the intermediates for a given vertex. */
 FVertexFactoryIntermediates GetVertexFactoryIntermediates(FVertexFactoryInput Input)
 {
-    
     FVertexFactoryIntermediates Intermediates = (FVertexFactoryIntermediates)0;
     Intermediates.SceneData = VF_GPUSCENE_GET_INTERMEDIATES(Input);
     
@@ -244,7 +275,6 @@ FVertexFactoryIntermediates GetVertexFactoryIntermediates(FVertexFactoryInput In
     return Intermediates;
 }
 
-// TODO: Capire come modificare per usare l'instancing
 /** Converts from vertex factory specific input to a FMaterialVertexParameters, which is used by vertex shader material inputs. */
 FMaterialVertexParameters GetMaterialVertexParameters(FVertexFactoryInput Input, FVertexFactoryIntermediates Intermediates, float3 WorldPosition, half3x3 TangentToLocal)
 {
@@ -255,8 +285,8 @@ FMaterialVertexParameters GetMaterialVertexParameters(FVertexFactoryInput Input,
     Result.SceneData = Intermediates.SceneData;
     Result.PrimitiveId = Intermediates.SceneData.PrimitiveId;
     
-    // Result.PreSkinnedPosition = WorldPosition;
-    // Result.PreSkinnedNormal = TangentToLocal[2]; //TangentBias(Input.TangentZ.xyz);
+    Result.PreSkinnedPosition = WorldPosition;
+    Result.PreSkinnedNormal = TangentToLocal[2]; //TangentBias(Input.TangentZ.xyz);
 
 #if USE_INSTANCING
     FPrimitiveSceneData PrimitiveData = GetPrimitiveData(Intermediates);

@@ -545,7 +545,7 @@ GrassInstancingMesh::FPersistentBuffers &FGrassInstancingRendererExtension::AddW
 		WorkDesc.BufferIndex = Buffers.AddDefaulted();
 		WorkDescs.Add(WorkDesc);
 		
-		GrassInstancingMesh::InitializeInstanceBuffers(InSection, Buffers[WorkDesc.BufferIndex]);
+ 		GrassInstancingMesh::InitializeInstanceBuffers(InSection, Buffers[WorkDesc.BufferIndex]);
 		
 	}
 
