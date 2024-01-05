@@ -77,7 +77,8 @@ FBoxSphereBounds UGrassFieldComponent::CalcBounds(const FTransform& LocalToWorld
 	}
 
 	UProceduralMeshComponent* SurfaceMesh = Terrain->GetComponentByClass<UProceduralMeshComponent>();
-	return SurfaceMesh->GetLocalBounds().TransformBy(LocalToWorld);
+	
+	return SurfaceMesh->GetLocalBounds().TransformBy(Terrain->GetTransform());
 }
 
 FPrimitiveSceneProxy* UGrassFieldComponent::CreateSceneProxy()
@@ -200,8 +201,9 @@ void UGrassFieldComponent::SampleGrassData()
 			FVector Position = Hit.ImpactPoint;
 			
 			GrassMesh::FPackedGrassData Data = GrassUtils::ComputeData(Position, Up, MinHeight, MaxHeight, MinWidth, MaxWidth);
+			DrawDebugLine(GetWorld(), Position, Position + Up * 12, FColor::Red, false, 20, 0, 1);
+
 			// GrassMesh::FGrassData GrassData = GrassMesh::FGrassData(Data);
-			// DrawDebugLine(GetWorld(), Position, Position + Up * 12, FColor::Red, false, 20, 0, 1);
 			// DrawDebugLine(GetWorld(), Position, Position + static_cast<FVector>(GrassData.Facing) * 5, FColor::Green, false, 20, 0, 1);
 			for (const auto& Section : Sections)
 			{

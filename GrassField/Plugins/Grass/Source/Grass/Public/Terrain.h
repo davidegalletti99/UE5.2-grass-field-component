@@ -18,30 +18,30 @@ class GRASS_API ATerrain : public AActor
 
 
 	UPROPERTY(EditAnywhere, Category = "Terrain")
-		int32 width = 256;
+		int32 Width = 256;
 
 	UPROPERTY(EditAnywhere, Category = "Terrain")
-		int32 height = 256;
+		int32 Height = 256;
 
 	UPROPERTY(EditAnywhere, Category = "Terrain")
-		float amplitude = 200;
+		float Amplitude = 200;
 
 	UPROPERTY(EditAnywhere, Category = "Terrain")
-		float spacing = 10;
+		float Spacing = 10;
 
 	
 	UPROPERTY(EditAnywhere, Category = "Terrain")
-		FVector2D scale = FVector2D(1, 1);
+		FVector2D Scale = FVector2D(1, 1);
 
 	UFUNCTION(CallInEditor, Category = "Terrain")
 		void ComputeMesh();
 
 public:
 	UPROPERTY(EditAnywhere, Category = "Terrain")
-		UProceduralMeshComponent* meshComponent;
+		UProceduralMeshComponent* MeshComponent;
 	
 	UPROPERTY(EditAnywhere, Category = "Terrain")
-		UGrassFieldComponent* grassFieldComponent;
+		UGrassFieldComponent* GrassFieldComponent ;
 
 
 

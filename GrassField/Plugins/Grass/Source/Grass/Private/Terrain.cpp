@@ -11,11 +11,11 @@ ATerrain::ATerrain()
  	// Set this actor to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
 	PrimaryActorTick.bCanEverTick = false;
 
-	meshComponent = this->CreateDefaultSubobject<UProceduralMeshComponent>(TEXT("TerrainMesh"));
-	this->AddComponent(TEXT("Terrain Mesh"), false, FTransform(), meshComponent);
+	MeshComponent = this->CreateDefaultSubobject<UProceduralMeshComponent>(TEXT("TerrainMesh"));
+	this->AddComponent(TEXT("Terrain Mesh"), false, FTransform(), MeshComponent);
 
-	grassFieldComponent = this->CreateDefaultSubobject<UGrassFieldComponent>(TEXT("GrassField"));
-	this->AddComponent(TEXT("Grass Field"), false, FTransform(), grassFieldComponent);
+	GrassFieldComponent = this->CreateDefaultSubobject<UGrassFieldComponent>(TEXT("GrassField"));
+	this->AddComponent(TEXT("Grass Field"), false, FTransform(), GrassFieldComponent);
 
 }
 
@@ -36,6 +36,6 @@ void ATerrain::Tick(float DeltaTime)
 void ATerrain::ComputeMesh()
 {
 	TerrainShaderExecutor texec;
-	texec.Execute((float)GetWorld()->TimeSeconds, width, height, amplitude, spacing, scale, meshComponent);
+	texec.Execute((float)GetWorld()->TimeSeconds, Width, Height, Amplitude, Spacing, Scale, MeshComponent);
 }
 
