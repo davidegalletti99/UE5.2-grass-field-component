@@ -98,7 +98,7 @@ protected:
 
 	UPROPERTY(EditAnywhere, Category = Rendering)
 		TArray<UGrassMeshSection *> Sections;
-
+	
 
 public:
 

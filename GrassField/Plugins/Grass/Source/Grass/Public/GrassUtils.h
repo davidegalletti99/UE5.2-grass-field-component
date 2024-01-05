@@ -3,7 +3,6 @@
 
 namespace GrassUtils
 {
-	
 	static GrassMesh::FPackedGrassData ComputeData(const FVector& Position, const FVector& Up, const float MinHeight, const float MaxHeight, const float MinWidth, const float MaxWidth)
 	{
 		FVector V = FMath::VRand();

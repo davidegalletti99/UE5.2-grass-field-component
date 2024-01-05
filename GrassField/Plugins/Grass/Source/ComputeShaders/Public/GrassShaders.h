@@ -17,6 +17,50 @@ namespace GrassMesh // GrassShaders
 	// ************************************************************************************************************** //
 	// ********************************************* Compute Shaders ************************************************ //
 	// ************************************************************************************************************** //
+
+	class COMPUTESHADERS_API FComputePhysics_CS : public FGlobalShader
+	{
+	public:
+		DECLARE_GLOBAL_SHADER(FComputePhysics_CS);
+		SHADER_USE_PARAMETER_STRUCT(FComputePhysics_CS, FGlobalShader);
+
+		BEGIN_SHADER_PARAMETER_STRUCT(FParameters, )
+			// ************************* Input Data **************************
+			SHADER_PARAMETER(float, DeltaTime)
+		
+			SHADER_PARAMETER(uint32, GrassDataNumber)
+			SHADER_PARAMETER_RDG_BUFFER_SRV(StructuredBuffer<FPackedGrassData>, GrassDataBuffer)
+
+			// // Wind Parameters
+			// SHADER_PARAMETER(float, SamplingScale)
+			// SHADER_PARAMETER_RDG_TEXTURE_SRV(Texture2D<float4>, GrassWindStrengthMap)
+			// SHADER_PARAMETER_SAMPLER(SamplerState, GrassWindStrengthSampler);
+
+			// Collision Parameters
+			SHADER_PARAMETER(float, FadingFactor)
+			SHADER_PARAMETER(uint32, SpheresNumber)
+			SHADER_PARAMETER_RDG_BUFFER_SRV(StructuredBuffer<FSphere3f>, SphereBuffer)
+
+			// Gravity Parameters
+			SHADER_PARAMETER(FVector4f, GravityDirection)
+			// SHADER_PARAMETER(uint32, PackedGravityDirection)
+			// SHADER_PARAMETER(float, GravityStrength)
+
+			// if use custom center of gravity
+			SHADER_PARAMETER(int, bIsCenterOfGravityEnabled)
+			SHADER_PARAMETER(FVector4f, GravityCenter)
+			// SHADER_PARAMETER(FVector3f, GravityCenter)
+			// SHADER_PARAMETER(float, GravityCenterStrength)
+		
+			// ************************* Output Data *************************
+			SHADER_PARAMETER_RDG_TEXTURE_UAV(RWTexture1D<float4>, RWGrassForceMap)
+		END_SHADER_PARAMETER_STRUCT()
+
+		static bool ShouldCompilePermutation(FGlobalShaderPermutationParameters const& Parameters)
+		{
+			return IsFeatureLevelSupported(Parameters.Platform, ERHIFeatureLevel::SM6);
+		}
+	};
 	
 	/** InitInstanceBuffer compute shader. */
 	class COMPUTESHADERS_API FInitInstanceBuffer_CS : public FGlobalShader

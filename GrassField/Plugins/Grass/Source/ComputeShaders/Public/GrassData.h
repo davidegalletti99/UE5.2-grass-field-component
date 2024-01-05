@@ -93,7 +93,6 @@ namespace GrassMesh {
 		uint32 Facing;
 	};
 
-
 	struct COMPUTESHADERS_API FGrassVertex
 	{
 		FVector3f Position;
