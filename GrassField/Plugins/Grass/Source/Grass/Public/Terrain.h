@@ -18,10 +18,10 @@ class GRASS_API ATerrain : public AActor
 
 
 	UPROPERTY(EditAnywhere, Category = "Terrain")
-		int32 Width = 256;
+		int32 Width = 128;
 
 	UPROPERTY(EditAnywhere, Category = "Terrain")
-		int32 Height = 256;
+		int32 Height = 128;
 
 	UPROPERTY(EditAnywhere, Category = "Terrain")
 		float Amplitude = 200;
@@ -29,7 +29,6 @@ class GRASS_API ATerrain : public AActor
 	UPROPERTY(EditAnywhere, Category = "Terrain")
 		float Spacing = 10;
 
-	
 	UPROPERTY(EditAnywhere, Category = "Terrain")
 		FVector2D Scale = FVector2D(1, 1);
 

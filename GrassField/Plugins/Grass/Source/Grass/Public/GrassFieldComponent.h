@@ -76,7 +76,7 @@ protected:
 		float CutoffDistance = 1000.0f;
 
 	UPROPERTY(EditAnywhere, Category = Rendering)
-		float Density = 200;
+		float Density = 1.0f;
 
 	UPROPERTY(EditAnywhere, Category = Rendering)
 		float Displacement = 10;
@@ -88,13 +88,13 @@ protected:
 		float MinHeight = 7;
 	
 	UPROPERTY(EditAnywhere, Category = Rendering)
-		float MaxWidth = 1.5;
+		float MaxWidth = .4;
 
 	UPROPERTY(EditAnywhere, Category = Rendering)
-		float MinWidth = 1;
+		float MinWidth = .3;
 
 	UPROPERTY(EditAnywhere, Category = Rendering)
-		FUintVector2 LodStepsRange = FUintVector2(1, 7);
+		FUintVector2 LodStepsRange = FUintVector2(0, 6);
 
 	UPROPERTY(EditAnywhere, Category = Rendering)
 		TArray<UGrassMeshSection *> Sections;
