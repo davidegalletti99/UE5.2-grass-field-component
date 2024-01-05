@@ -1,0 +1,295 @@
+#pragma once
+#define GRAVITATIONAL_ACCELERATION 9.81
+#define PI 3.14159265359
+#define SQ_2_PI 2.50662827463
+#define FORWARD_VECTOR float3(0, 1, 0)
+#define BACKWARD_VECTOR float3(0, -1, 0)
+
+// Calcola la curva di Bézier quadratica
+#define QUAD_BEZ(p0, p1, p2, t) (lerp(p0, lerp(p1, p2, t), t))
+#define CUBIC_BEZ(p0, p1, p2, p3, t) (lerp(QUAD_BEZ(p0, p1, p2, t), QUAD_BEZ(p1, p2, p3, t), t))
+#define GAUSSIAN_MAP(m, s, x) (exp(-(x - m)*(x - m) / (2 * s * s)) / (s * SQ_2_PI))
+
+#define IDENTITY_MATRIX_3X3 float3x3( \
+        float3(1, 0, 0), \
+        float3(0, 1, 0), \
+        float3(0, 0, 1))
+
+#define IDENTITY_MATRIX_4X4 float4x4( \
+        float4(1, 0, 0, 0), \
+        float4(0, 1, 0, 0), \
+        float4(0, 0, 1, 0), \
+        float4(0, 0, 0, 1))
+
+#define ROTATION_MATRIX_Z_3X3(angle) float3x3( \
+        float3(cos(angle), -sin(angle), 0), \
+        float3(sin(angle), cos(angle),  0), \
+        float3(         0,          0,  1))
+
+#define ROTATION_MATRIX_Z_4X4(angle) float4x4( \
+        float4(cos(angle), -sin(angle), 0, 0), \
+        float4(sin(angle),  cos(angle), 0, 0), \
+        float4(         0,           0, 1, 0), \
+        float4(         0,           0, 0, 1))
+
+
+#define CROSS_PRODUCT_MATRIX_3X3(vec) float3x3( \
+        float3(     0, -vec.z,  vec.y), \
+        float3( vec.z,      0, -vec.x), \
+        float3(-vec.y,  vec.x,      0))
+
+
+#define TRANSLATION_MATRIX_4X4(vec) float4x4( \
+        float4(1, 0, 0, vec.x), \
+        float4(0, 1, 0, vec.y), \
+        float4(0, 0, 1, vec.z), \
+        float4(0, 0, 0,      1))
+
+#define SCALE_MATRIX_4X4(vec) float4x4( \
+        float4(vec.x,      0,      0, 0), \
+        float4(     0, vec.y,      0, 0), \
+        float4(     0,      0, vec.z, 0), \
+        float4(     0,      0,      0, 1))
+
+struct FSphere
+{
+	float3 Center;
+	float Radius;
+};
+
+/** 
+ * Struct per la generazione dei fili d'erba
+ */
+struct FGrassData
+{
+    uint Index;
+    float3 Position;
+	
+	float3 Up;
+    float3 Facing;
+    
+    float Height;
+    float Width;
+	float Stiffness;
+};
+
+struct FPackedGrassData
+{
+    uint Index;
+    float3 Position;
+	
+	uint Up;
+    uint Facing;
+
+    uint HeightAndWidth;
+	float Stiffness;
+};
+
+struct FGrassVertex
+{
+    float3 Position;
+    float2 UV;
+    
+    float3 TangentX;
+    float4 TangentZ; // TangentZ.w contains sign of tangent basis determinant
+};
+
+struct FPackedGrassVertex
+{
+	float3 Position;
+	uint UV;
+    
+	uint TangentX;
+	uint TangentZ; // TangentZ.w contains sign of tangent basis determinant
+};
+
+struct FGrassInstance
+{
+    float4x4 Transform;
+	
+	// float3 V0;
+	// float3 V1;
+	// float3 V2;
+	//
+	// float3 Up;
+	//
+	// float Width;
+	// float2 Facing;
+};
+
+struct FPackedGrassInstance
+{
+	float3 V0;
+	float3 V1;
+	float3 V2;
+
+	uint Up;
+    
+	float Width;
+	uint Facing;
+};
+
+/**
+ * Pack a float4 normal into a uint.
+ * @param Normal The float4 to pack.
+ * @return The packed uint.
+ */
+uint PackNormal(const float4 Normal)
+{
+	float4 MappedNormal = (1 + Normal); // [-1, 1] -> [0, 2]
+	MappedNormal *= 255.0f / 2.0f; // [0, 2] -> [0, 255]
+
+	uint Out = 0;
+	Out |= (uint(MappedNormal.x) << 24);
+	Out |= (uint(MappedNormal.y) << 16);
+	Out |= (uint(MappedNormal.z) << 8);
+	Out |= (uint(MappedNormal.w) << 0);
+	
+	return Out;
+}
+
+uint PackNormal(const float3 Normal)
+{
+	return PackNormal(float4(Normal, 1.0f));
+}
+
+uint PackNormal(const float2 Normal)
+{
+	return PackNormal(float4(Normal, 0.0f, 1.0f));
+}
+
+/**
+ * Unpack a uint into a float4 normal.
+ * @param Normal The uint to unpack.
+ * @return The unpacked float4.
+ */
+float4 UnpackNormal(const uint Normal)
+{
+	float4 Out = 0;
+	Out.x = float((Normal & 0xff000000) >> 24);
+	Out.y = float((Normal & 0x00ff0000) >> 16);
+	Out.z = float((Normal & 0x0000ff00) >> 8);
+	Out.w = float((Normal & 0x000000ff) >> 0);
+
+	Out *= 2.0f / 255.0f;
+	Out -= 1.0f;
+	
+	return Out;
+}
+
+/**
+ * Pack a float2 UV into a uint.
+ * @param UV The float2 to pack 
+ * @return the packed uint.
+ */
+uint PackUV(const float2 UV)
+{
+	const uint MaxUint16 = 65535;
+	float2 MappedUV = UV * MaxUint16; // [0, 1] -> [0, MaxUint16]
+
+	uint Out = 0;
+	Out |= (uint(MappedUV.x) << 16);
+	Out |= (uint(MappedUV.y) << 0);
+	
+	return Out;
+}
+
+float2 UnpackUV(const uint UV)
+{
+	const uint MaxUint16 = 65535;
+	float2 Out = 0;
+	Out.x = float((UV & 0xffff0000) >> 16);
+	Out.y = float((UV & 0x0000ffff) >> 0);
+
+	Out /= MaxUint16;
+	return Out;
+}
+
+uint PackHeightAndWidth(const float Height, const float Width)
+{
+	uint HeightAndWidth = 0;
+	// prendo i 4 bit medno significativi dall'esponente e 12 dalla mantissa
+	// 7    f    f    f    8    8    0    0
+	// 0111 1111 1111 1111 1000 0000 0000 0000
+	HeightAndWidth = (asuint(Height) & 0x7fff8000) << 1;
+	HeightAndWidth |= (asuint(Width) & 0x7fff8000) >> 15;
+	
+	return HeightAndWidth;
+}
+
+/**
+ * Unpack the Height and Width from the HeightAndWidth field of the packed data.
+ * @param HeightAndWidth The HeightAndWidth field of the packed data.
+ * @return float2(Height, Width)
+ */
+float2 UnpackHeightAndWidth(const uint HeightAndWidth)
+{
+	float2 HeightAndWidthF = 0;
+	HeightAndWidthF.x = asfloat((HeightAndWidth & 0xffff0000) >> 1);
+	HeightAndWidthF.y = asfloat((HeightAndWidth & 0x0000ffff) << 15);
+    
+	return HeightAndWidthF;
+}
+
+
+/*
+ * Unpack the Facing from the Facing field of the packed data.
+ * @param Facing The Facing field of the packed data.
+ * @return the unpacked Facing.
+ */
+float2 UnpackFacing(const uint Facing)
+{
+	float2 FacingF = 0;
+    
+	const uint SignX = Facing & 0x80000000;
+	const uint SignY = (Facing & 0x00008000) << 16;
+	FacingF.x = asfloat(SignX | (Facing & 0x7fff0000) >> 1);
+	FacingF.y = asfloat(SignY | (Facing & 0x00007fff) << 15);
+    
+	return FacingF;
+}
+
+
+/*
+ * Pack the GrassData into a PackedGrassData.
+ * @param InData The raw data.
+ * @return The packed data.
+ */
+FPackedGrassData Pack(const FGrassData InData)
+{
+    FPackedGrassData OutData;
+    
+    OutData.Position = InData.Position;
+    OutData.Index = InData.Index;
+	
+    OutData.Facing = PackNormal(InData.Facing);
+	OutData.Up = PackNormal(InData.Up);
+
+	OutData.HeightAndWidth = PackHeightAndWidth(InData.Height, InData.Width);
+	OutData.Stiffness = InData.Stiffness;
+    
+    return OutData;
+}
+
+/*
+ * Unpack the PackedGrassData into a LodGrassData.
+ * @param InData The packed data.
+ * @return The unpacked data.
+ */
+FGrassData Unpack(const FPackedGrassData InData)
+{
+    FGrassData OutData = (FGrassData) 0;
+    
+    OutData.Position = InData.Position;
+    OutData.Index = InData.Index;
+	
+	float2 HeightAndWidth = UnpackHeightAndWidth(InData.HeightAndWidth);
+    OutData.Height = HeightAndWidth.x;
+	OutData.Width = HeightAndWidth.y;
+
+	OutData.Facing = UnpackNormal(InData.Facing).xyz;
+    OutData.Up = UnpackNormal(InData.Up).xyz;
+	OutData.Stiffness = InData.Stiffness;
+	
+    return OutData;
+}

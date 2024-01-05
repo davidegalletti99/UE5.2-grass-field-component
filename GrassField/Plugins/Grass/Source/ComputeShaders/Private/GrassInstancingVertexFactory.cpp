@@ -75,10 +75,10 @@ void FGrassInstancingVertexFactory::SetData(const FVertexBuffer* VertexBuffer)
 		{
 			// Initialize the vertex factory's stream components.
 			FGrassInstancingVertexDataType NewData;
-			NewData.PositionComponent = STRUCTMEMBER_VERTEXSTREAMCOMPONENT(VertexBuffer, GrassMesh::FGrassVertex, Position, VET_Float3);
-			NewData.UVComponent = STRUCTMEMBER_VERTEXSTREAMCOMPONENT(VertexBuffer, GrassMesh::FGrassVertex, UV, VET_Float2);
-			NewData.TangentBasisComponents[0] = STRUCTMEMBER_VERTEXSTREAMCOMPONENT(VertexBuffer, GrassMesh::FGrassVertex, TangentX, VET_Float3);
-			NewData.TangentBasisComponents[1] = STRUCTMEMBER_VERTEXSTREAMCOMPONENT(VertexBuffer, GrassMesh::FGrassVertex, TangentZ, VET_Float4);
+			NewData.PositionComponent = STRUCTMEMBER_VERTEXSTREAMCOMPONENT(VertexBuffer, GrassMesh::FPackedGrassVertex, Position, VET_Float3);
+			NewData.UVComponent = STRUCTMEMBER_VERTEXSTREAMCOMPONENT(VertexBuffer, GrassMesh::FPackedGrassVertex, UV, VET_UInt);
+			NewData.TangentBasisComponents[0] = STRUCTMEMBER_VERTEXSTREAMCOMPONENT(VertexBuffer, GrassMesh::FPackedGrassVertex, TangentX, VET_UInt);
+			NewData.TangentBasisComponents[1] = STRUCTMEMBER_VERTEXSTREAMCOMPONENT(VertexBuffer, GrassMesh::FPackedGrassVertex, TangentZ, VET_UInt);
 			this->SetData(NewData);
 		});
 }
@@ -163,6 +163,7 @@ void FGrassInstancingShaderParameters::GetElementShaderBindings(
 	// TODO
 	ShaderBindings.Add(InstanceBufferParameter, UserData->InstanceBufferSRV);
 	ShaderBindings.Add(LodViewOriginParameter, UserData->LodViewOrigin);
+	ShaderBindings.Add(NumVerticesParameter, UserData->NumVertices);
 	// ShaderBindings.Add(LodDistancesParameter, UserData->LodDistances);
 }
 

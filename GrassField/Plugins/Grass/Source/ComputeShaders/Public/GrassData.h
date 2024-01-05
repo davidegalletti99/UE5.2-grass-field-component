@@ -30,104 +30,162 @@ namespace GrassMesh {
 	
 	struct COMPUTESHADERS_API FGrassData
 	{
+		uint32 Index;
 		FVector3f Position;
-		FVector2f Facing;
-		// float WindStrength;
-		int Hash;
+		
+		FVector3f Up;
+		FVector3f Facing;
 
 		float Height;
 		float Width;
-		// float Tilt;
-		// float Bend;
+		float Stiffness;
 
-		FGrassData(FVector3f Position, FVector2f Facing, int Hash, float Height, float Width);
+		FGrassData(
+			const uint32 Index,
+			const FVector3f Position,
+			const FVector3f Up, const FVector3f Facing,
+			const float Height, const float Width, const float Stiffness);
 		FGrassData(FPackedGrassData& InData);
 	};
 	
 	struct COMPUTESHADERS_API FPackedGrassData
 	{
+		uint32 Index;
 		FVector3f Position;
+		
+		uint32 Up;
 		uint32 Facing;
-		// float WindStrength;
-
-		int Hash;
 
 		uint32 HeightAndWidth;
-		// uint32 TiltAndBand;
+		float Stiffness;
 
-		FPackedGrassData(FVector3f Position, FVector2f Facing, int Hash, float Height, float Width);
+		FPackedGrassData(
+			const uint32 Index,
+			const FVector3f Position,
+			const FVector3f Up, const FVector3f Facing,
+			const float Height, float Width, const float Stiffness);
 		FPackedGrassData(FGrassData& InData);
 	};
-
-
-	struct COMPUTESHADERS_API FLodGrassData
-	{
-		FVector3f Position;
-		FVector2f Facing;
-		// float WindStrength;
-		int Hash;
-
-		uint32 Lod;
-
-		float Height;
-		float Width;
-		// float Tilt;
-		// float Bend;
-	};
-
-	struct COMPUTESHADERS_API FPackedLodGrassData
-	{
-		FVector3f Position;
-		uint32 Facing;
-		// float WindStrength;
-		int Hash;
-		
-		uint32 Lod;
-
-		uint32 HeightAndWidth;
-		// uint32 TiltAndBand;
-	};
+	
 
 	struct COMPUTESHADERS_API FGrassInstance
 	{
 		float Transform[4][4];
-		int Hash;
-		
+		// FVector3f V0;
+		// FVector3f V1;
+		// FVector3f V2;
+		//
+		// FVector3f Up;
+		//
+		// float Width;
+		// FVector3f Facing;
 	};
 
-	// TODO: Implementare packig e unpacking per i vertici
+	struct COMPUTESHADERS_API FPackedGrassInstance
+	{
+		FVector3f V0;
+		FVector3f V1;
+		FVector3f V2;
+		
+		uint32 Up;
+
+		float Width;
+		uint32 Facing;
+	};
+
+
 	struct COMPUTESHADERS_API FGrassVertex
 	{
 		FVector3f Position;
 		FVector2f UV;
 		FVector3f TangentX;
 		FVector4f TangentZ; // TangentZ.w contains sign of tangent basis determinant
-		// FPackedNormal TangentX;
-		// FPackedNormal TangentZ;
 	};
 
-	// struct COMPUTESHADERS_API FPackedGrassVertex
-	// {
-	// 	FVector3f Position;
-	// 	uint32 UV;
-	// }
+	struct COMPUTESHADERS_API FPackedGrassVertex
+	{
+		FVector3f Position;
+		uint32 UV;
+		uint32 TangentX;
+		uint32 TangentZ; // TangentZ.w contains sign of tangent basis determinant
+	};
 
+	inline uint32 PackNormal(FVector4f Normal)
+	{
+		FVector4f MappedNormal = Normal + FVector4f(1, 1, 1, 1);
+		MappedNormal *= 255.0f / 2.0f;
+
+		uint32 Out = 0;
+		Out |= (static_cast<uint32>(MappedNormal.X) << 24);
+		Out |= (static_cast<uint32>(MappedNormal.Y) << 16);
+		Out |= (static_cast<uint32>(MappedNormal.Z) << 8);
+		Out |= (static_cast<uint32>(MappedNormal.W) << 0);
+
+		return Out;
+	}
+
+	inline uint32 PackNormal(FVector3f Normal)
+	{
+		return PackNormal(FVector4f(Normal, 1));
+	}
+	
+	inline FVector4f UnpackNormal(uint32 Normal)
+	{
+		FVector4f Out;
+		Out.X = static_cast<float>((Normal & 0xff000000) >> 24);
+		Out.Y = static_cast<float>((Normal & 0x00ff0000) >> 16);
+		Out.Z = static_cast<float>((Normal & 0x0000ff00) >> 8);
+		Out.W = static_cast<float>((Normal & 0x000000ff) >> 0);
+
+		Out *= 2.0f / 255.0f;
+		Out -= FVector4f(1, 1, 1, 1);
+		
+		return Out;
+	}
+
+	inline uint32 PackUV(const FVector2f UV)
+	{
+		constexpr uint32 MaxUint16 = 65535;
+		const FVector2f MappedUV = UV * MaxUint16; // [0, 1] -> [0, MaxUint16]
+
+		uint32 Out = 0;
+		Out |= ((static_cast<uint32>(MappedUV.X) & 0x0000ffff) << 16);
+		Out |= ((static_cast<uint32>(MappedUV.Y) & 0x0000ffff) << 0);
+	
+		return Out;
+	}
+
+	inline FVector2f UnpackUV(const uint32 UV)
+	{
+		constexpr uint32 MaxUint16 = 65535;
+		FVector2f Out;
+		Out.X = static_cast<float>((UV & 0xffff0000) >> 16);
+		Out.Y = static_cast<float>((UV & 0x0000ffff) >> 0);
+		
+		Out /= MaxUint16;
+		return Out;
+	}
+
+#define GRAVITATIONAL_ACCELERATION 9.81f
+#define QUAD_BEZ(P0, P1, P2, T) ( FMath::Lerp(P0, FMath::Lerp(P1, P2, T), T) )
+#define CUB_BEZ(P0, P1, P2, P3, T) ( FMath::Lerp(QUAD_BEZ(P0, P1, P2, T), QUAD_BEZ(P1, P2, P3, T), T) )
+	
 	inline float ComputeLodIndex(
-		const FSceneView* View,
+		const FVector& CullOrigin,
 		const FBox& Bounds,
 		const float CutoffDistance,
 		const FUintVector2 MinMaxLod)
 	{
-		float Distance = FVector::DistXY(View->CullingOrigin, Bounds.GetCenter());
-		Distance -= FVector::DistXY(FVector::Zero(), Bounds.GetExtent());
+		float Distance = FVector::Dist(CullOrigin, Bounds.GetCenter());
+		Distance -= Bounds.GetExtent().Size();
 		
-		const float LodPercentage = 1 - (Distance / CutoffDistance);
-		const uint32 Lod = FMath::Clamp(FMath::Lerp(MinMaxLod.X, MinMaxLod.Y, LodPercentage), MinMaxLod.X, MinMaxLod.Y);
+		const float LodPercentage = 1 - Distance / CutoffDistance;
+		const uint32 Lod = FMath::Clamp(
+			CUB_BEZ(MinMaxLod.X, MinMaxLod.Y * .05, MinMaxLod.Y * .2, MinMaxLod.Y, LodPercentage),
+			MinMaxLod.X, MinMaxLod.Y);
 		return Lod;
 	}
 	
-#define GRAVITATIONAL_ACCELERATION 9.81f
-#define QUAD_BEZ(P0, P1, P2, T) ( FMath::Lerp(P0, FMath::Lerp(P1, P2, T), T) )
 	
 	inline FVector3f MovePoint(const FVector3f Pi, const FVector3f Vi, const float T)
 	{
@@ -137,7 +195,7 @@ namespace GrassMesh {
 	}
 
 	inline void CreateGrassModels(
-	    TResourceArray<FGrassVertex>& VertexBuffer,
+	    TResourceArray<FPackedGrassVertex>& VertexBuffer,
 	    TResourceArray<uint32>& IndexBuffer,
 	    uint32 LodStep)
 	{
@@ -174,17 +232,17 @@ namespace GrassMesh {
 	        
 	        const float CurrentHalfWidth = CurrentFactor * MaxWidth / 2;
 	        
-	        FGrassVertex P1, P2;
+	        FPackedGrassVertex P1, P2;
 	        P1.Position = CurrentPosition - Tangent * CurrentHalfWidth;
-	        P1.UV = FVector2f(0.5 - CurrentFactor, Percentage);
-	        P1.TangentX = Tangent1;
-	        P1.TangentZ = FVector4f(Normal1, 1);
+	        P1.UV = PackUV(FVector2f(0.5 - CurrentFactor, Percentage));
+	        P1.TangentX = PackNormal(Tangent1);
+	        P1.TangentZ = PackNormal(FVector4f(Normal1, 1));
 	    	VertexBuffer[VertexIndex + 0] = P1;
 
 	        P2.Position = CurrentPosition + Tangent * CurrentHalfWidth;
-	        P2.UV = FVector2f(0.5 + CurrentFactor, Percentage);
-	        P2.TangentX = Tangent2;
-	        P2.TangentZ = FVector4f(Normal2, 1);
+	        P2.UV = PackUV(FVector2f(0.5 + CurrentFactor, Percentage));
+	        P2.TangentX = PackNormal(Tangent2);
+	        P2.TangentZ = PackNormal(FVector4f(Normal2, 1));
 	        VertexBuffer[VertexIndex + 1] = P2;
 
 	        
@@ -211,11 +269,11 @@ namespace GrassMesh {
 	    }
 	    
 	    // last point
-	    FGrassVertex Pe;
+	    FPackedGrassVertex Pe;
 	    Pe.Position = FinalPosition;
-	    Pe.UV = FVector2f(0.5, 1);
-	    Pe.TangentX = Tangent;
-	    Pe.TangentZ = FVector4f(Normal, 1);
+	    Pe.UV = PackUV(FVector2f(0.5, 1));
+	    Pe.TangentX = PackNormal(Tangent);
+	    Pe.TangentZ = PackNormal(FVector4f(Normal, 1));
 	    VertexBuffer[VertexIndex + 0] = Pe;
 	}
 }

@@ -3,8 +3,9 @@
 
 #include "GrassFieldComponent.h"
 
-#include "GrassInstancingSceneProxy.h"
-// #include "GrassSceneProxy.h"
+#include "Terrain.h"
+#include "Kismet/GameplayStatics.h"
+
 
 UGrassMeshSection::UGrassMeshSection(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
@@ -12,12 +13,13 @@ UGrassMeshSection::UGrassMeshSection(const FObjectInitializer& ObjectInitializer
 	GrassData = TResourceArray<GrassMesh::FPackedGrassData>();
 }
 
-bool UGrassMeshSection::AddGrassData(const GrassMesh::FPackedGrassData& Data)
+bool UGrassMeshSection::AddGrassData(GrassMesh::FPackedGrassData& Data)
 {
 	const bool Result = FMath::PointBoxIntersection(FVector(Data.Position), Bounds);
 
 	if (Result)
 	{
+		Data.Index = DataNum;
 		GrassData.Add(Data);
 		DataNum++;
 	}
@@ -161,45 +163,52 @@ void UGrassFieldComponent::SampleGrassData()
 {
 	if (Terrain == nullptr)
 		return;
+	
 	for (const auto& Section : Sections)
 		Section->Empty();
 
-	UProceduralMeshComponent* SurfaceMesh = Terrain->GetComponentByClass<UProceduralMeshComponent>();
-	FProcMeshSection* MeshSection = SurfaceMesh->GetProcMeshSection(0);
-	for (auto& Vertex : MeshSection->ProcVertexBuffer)
-	{
-		FVector p = Vertex.Position + SurfaceMesh->GetActorPositionForRenderer();
-		for (float i = 0; i < Density; i++)
-		{
-			FVector Offset = (FMath::VRand() - 0.5) * Displacement;
-			
-			FVector Start = p + FVector(Offset.X, Offset.Y, 10);
-			FVector End = p + FVector(Offset.X, Offset.Y, -10);
+	TArray<AActor*> IgnoredActors;
+	UGameplayStatics::GetAllActorsWithTag(GetWorld(), TEXT("Scene"), IgnoredActors);
+	FCollisionQueryParams Params = FCollisionQueryParams(Terrain->Tags[0]);
+	Params.AddIgnoredActors(IgnoredActors);
 
-			if (FHitResult Hit; GetWorld()->LineTraceSingleByChannel(Hit, Start, End, SurfaceMesh->GetCollisionObjectType()))
+	FBox Box = Bounds.GetBox();
+	TArray<FVector> Points = TArray<FVector>();
+
+	GrassUtils::PoissonSampling(Box, 2 / Density, Points);
+	
+	float MaxZ = Box.GetCenter().Z + Box.GetExtent().Z;
+	float MinZ = Box.GetCenter().Z - Box.GetExtent().Z;
+	
+	UProceduralMeshComponent* SurfaceMesh = Terrain->GetComponentByClass<UProceduralMeshComponent>();
+	for (auto Point : Points)
+	{
+		Point += Box.GetCenter() - Box.GetExtent();
+		
+		FVector Start = Point;
+		Start.Z = MaxZ;
+		
+		FVector End = Point;
+		End.Z = MinZ;
+
+		
+		if (FHitResult Hit;
+			GetWorld()->LineTraceSingleByProfile(Hit, Start, End, SurfaceMesh->GetCollisionProfileName(), Params)
+			&& Hit.GetActor() == Terrain)
+		{
+			FVector Up = Hit.ImpactNormal;
+			FVector Position = Hit.ImpactPoint;
+			
+			GrassMesh::FPackedGrassData Data = GrassUtils::ComputeData(Position, Up, MinHeight, MaxHeight, MinWidth, MaxWidth);
+			// GrassMesh::FGrassData GrassData = GrassMesh::FGrassData(Data);
+			// DrawDebugLine(GetWorld(), Position, Position + Up * 12, FColor::Red, false, 20, 0, 1);
+			// DrawDebugLine(GetWorld(), Position, Position + static_cast<FVector>(GrassData.Facing) * 5, FColor::Green, false, 20, 0, 1);
+			for (const auto& Section : Sections)
 			{
-				if (FMath::Abs(Vertex.Normal.Dot(FVector(0, 0, 1))) <= 0.8)
-					continue;
-				
-				FVector2f Facing = FVector2f(FVector3f(FMath::VRand() - 0.5));
-				Facing.Normalize();
-				const float Extraction = FMath::SRand();
-				const float Height = Extraction * (MaxHeight - MinHeight) + MinHeight;
-				const float Width = Extraction * (MaxWidth - MinWidth) + MinWidth;
-				
-				GrassMesh::FPackedGrassData GrassPoint
-				{
-					FVector3f(Hit.ImpactPoint),
-					FVector2f(Facing.X, Facing.Y),
-					0,
-					Height,
-					Width
-				};
-				
-				for (auto& Section : Sections)
-					if(Section->AddGrassData(GrassPoint))
-						break;
+				if (Section->AddGrassData(Data))
+					break;
 			}
 		}
+		
 	}
 }

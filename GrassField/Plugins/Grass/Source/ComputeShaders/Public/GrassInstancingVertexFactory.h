@@ -12,6 +12,7 @@ struct FGrassInstancingUserData : FOneFrameResource
 {
 	FRHIShaderResourceView *InstanceBufferSRV;
 	FVector3f LodViewOrigin;
+	uint32 NumVertices;
 };
 
 /**
@@ -28,7 +29,7 @@ public:
 	virtual void InitRHI() override;
 	virtual void ReleaseRHI() override;
 	
-	TResourceArray<GrassMesh::FGrassVertex> Vertices;
+	TResourceArray<GrassMesh::FPackedGrassVertex> Vertices;
 };
 
 /*
@@ -144,5 +145,5 @@ protected:
 	// TODO
 	LAYOUT_FIELD(FShaderResourceParameter, InstanceBufferParameter);
 	LAYOUT_FIELD(FShaderParameter, LodViewOriginParameter);
-	// LAYOUT_FIELD(FShaderParameter, LodDistancesParameter);
+	LAYOUT_FIELD(FShaderParameter, NumVerticesParameter);
 };

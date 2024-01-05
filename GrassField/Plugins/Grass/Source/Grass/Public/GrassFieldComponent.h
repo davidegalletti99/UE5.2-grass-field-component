@@ -10,6 +10,9 @@
 #include "Math.h"
 #include "GrassData.h"
 
+#include "GrassInstancingSceneProxy.h"
+// #include "GrassSceneProxy.h"
+#include "GrassUtils.h"
 #include "GrassFieldComponent.generated.h"
 
 
@@ -34,7 +37,7 @@ protected:
 public:
 	explicit UGrassMeshSection(const FObjectInitializer& ObjectInitializer = FObjectInitializer::Get());
 
-	bool AddGrassData(const GrassMesh::FPackedGrassData& Data);
+	bool AddGrassData(GrassMesh::FPackedGrassData& Data);
 	void Empty();
 	
 	TResourceArray<GrassMesh::FPackedGrassData>& GetGrassData()

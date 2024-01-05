@@ -1,247 +1,6 @@
 #pragma once
-// #include "Noise.ush"
 
-#define GRAVITATIONAL_ACCELERATION 9.81
-#define PI 3.14159265359
-#define SQ_2_PI 2.50662827463
-#define FORWARD_VECTOR float3(0, 1, 0)
-#define BACKWARD_VECTOR float3(0, -1, 0)
-
-// Calcola la curva di Bézier quadratica
-#define QUAD_BEZ(p0, p1, p2, t) (lerp(p0, lerp(p1, p2, t), t))
-#define CUBIC_BEZ(p0, p1, p2, p3, t) (lerp(QUAD_BEZ(p0, p1, p2, t), QUAD_BEZ(p1, p2, p3, t), t))
-#define GAUSSIAN_MAP(m, s, x) (exp(-(x - m)*(x - m) / (2 * s * s)) / (s * SQ_2_PI))
-
-#define IDENTITY_MATRIX_3X3 float3x3( \
-        float3(1, 0, 0), \
-        float3(0, 1, 0), \
-        float3(0, 0, 1))
-
-#define IDENTITY_MATRIX_4X4 float4x4( \
-        float4(1, 0, 0, 0), \
-        float4(0, 1, 0, 0), \
-        float4(0, 0, 1, 0), \
-        float4(0, 0, 0, 1))
-
-#define ROTATION_MATRIX_Z_3X3(angle) float3x3( \
-        float3(cos(angle), -sin(angle), 0), \
-        float3(sin(angle), cos(angle),  0), \
-        float3(         0,          0,  1))
-
-#define ROTATION_MATRIX_Z_4X4(angle) float4x4( \
-        float4(cos(angle), -sin(angle), 0, 0), \
-        float4(sin(angle),  cos(angle), 0, 0), \
-        float4(         0,           0, 1, 0), \
-        float4(         0,           0, 0, 1))
-
-
-#define SKEW_SYMMETRIC_CROSS_PRODUCT_MATRIX_3X3(vec) float3x3( \
-        float3(     0, -vec.z,  vec.y), \
-        float3( vec.z,      0, -vec.x), \
-        float3(-vec.y,  vec.x,      0))
-
-#define SKEW_SYMMETRIC_CROSS_PRODUCT_MATRIX_4X4(vec) float4x4( \
-        float4(     0, -vec.z,  vec.y, 0), \
-        float4( vec.z,      0, -vec.x, 0), \
-        float4(-vec.y,  vec.x,      0, 0), \
-        float4(    0,      0,      0,  0))
-
-#define TRANSLATION_MATRIX_4X4(vec) float4x4( \
-        float4(1, 0, 0, vec.x), \
-        float4(0, 1, 0, vec.y), \
-        float4(0, 0, 1, vec.z), \
-        float4(0, 0, 0,      1))
-
-#define SCALE_MATRIX_4X4(vec) float4x4( \
-        float4(vec.x,      0,      0, 0), \
-        float4(     0, vec.y,      0, 0), \
-        float4(     0,      0, vec.z, 0), \
-        float4(     0,      0,      0, 1))
-    
-
-
-/** 
- * Struct per la generazione dei fili d'erba
- */
-struct FGrassData
-{
-    float3 Position;
-    float2 Facing;
-	// float WindStrength;
-    
-    int Hash;
-    
-    float Height;
-    float Width;
-    
-    // float Tilt;
-    // float Bend;
-};
-
-struct FPackedGrassData
-{
-    float3 Position;
-    uint Facing;
-	// float WindStrength;
-
-    int Hash;
-
-    uint HeightAndWidth;
-	// uint TiltAndBand;
-};
-
-struct FLodGrassData
-{
-    float3 Position;
-    float2 Facing;
-	// float WindStrength;
-    
-    int Hash;
-    uint LodLevel;
-    
-    float Height;
-    float Width;
-    
-    // float Tilt;
-    // float Bend;
-};
-
-struct FPackedLodGrassData
-{
-    float3 Position;
-    uint Facing;
-	// float WindStrength;
-
-    int Hash;
-    uint LodLevel;
-
-    uint HeightAndWidth;
-	// uint TiltAndBand;
-};
-
-struct FGrassVertex
-{
-    float3 Position;
-    float2 UV;
-    
-    float3 TangentX;
-    float4 TangentZ; // TangentZ.w contains sign of tangent basis determinant
-};
-
-struct FGrassInstance
-{
-    float4x4 Transform;
-    int Hash;
-};
-
-/*
- * Pack the GrassData into a PackedGrassData.
- * @param InData The raw data.
- * @return The packed data.
- */
-FPackedGrassData Pack(const FGrassData InData)
-{
-    FPackedGrassData OutData;
-    
-    // prendo i 4 bit medno significativi dall'esponente e 12 dalla mantissa
-    // 0    7    f    f    f    8    0    0
-    // 0000 0111 1111 1111 1111 1000 0000 0000
-    OutData.HeightAndWidth = (asuint(InData.Height) & 0x7fff8000) << 1;
-    OutData.HeightAndWidth |= (asuint(InData.Width) & 0x7fff8000) >> 15;
-    
-    // prendo i 3 bit medno significativi dall'esponente e 13 dalla mantissa    
-    // 0    3    f    f    f    a    0    0
-    // 0000 0011 1111 1111 1111 1100 0000 0000
-    uint Signes = (asuint(InData.Facing.x) & 0x80000000);
-    Signes |= (asuint(InData.Facing.y) & 0x80000000) >> 16;
-    
-    OutData.Facing = (asuint(InData.Facing.x) & 0x3fff8000) << 1;
-    OutData.Facing |= (asuint(InData.Facing.y) & 0x3fff8000) >> 15;
-    OutData.Facing |= Signes;
-
-    OutData.Position = InData.Position;
-    OutData.Hash = InData.Hash;
-    
-    return OutData;
-}
-
-/*
- * Unpack the PackedGrassData into a LodGrassData.
- * @param InData The packed data.
- * @return The unpacked data.
- */
-FGrassData Unpack(const FPackedGrassData InData)
-{
-    FGrassData OutData = (FGrassData) 0;
-    
-    OutData.Position = InData.Position;
-    OutData.Hash = InData.Hash;
-    
-    OutData.Height = asfloat((InData.HeightAndWidth & 0xffff0000) >> 1);
-    OutData.Width = asfloat((InData.HeightAndWidth & 0x0000ffff) << 15);
-    
-    const uint SignX = InData.Facing & 0x80000000;
-    const uint SignY = (InData.Facing & 0x00008000) << 16;
-    OutData.Facing.x = asfloat(SignX | (InData.Facing & 0x7fff0000) >> 1);
-    OutData.Facing.y = asfloat(SignY | (InData.Facing & 0x00007fff) << 15);
-    
-    return OutData;
-}
-
-/*
- * Unpack the PackedLodGrassData into a LodGrassData.
- * @param InData The packed data.
- * @return The unpacked data.
- */
-FLodGrassData Unpack(const FPackedLodGrassData InData)
-{
-    FLodGrassData OutData = (FLodGrassData) 0;
-    
-    OutData.Position = InData.Position;
-    OutData.Hash = InData.Hash;
-    OutData.LodLevel = InData.LodLevel;
-    
-    OutData.Height = asfloat((InData.HeightAndWidth & 0xffff0000) >> 1);
-    OutData.Width = asfloat((InData.HeightAndWidth & 0x0000ffff) << 15);
-    
-    const uint SignX = InData.Facing & 0x80000000;
-    const uint SignY = (InData.Facing & 0x00008000) << 16;
-    OutData.Facing.x = asfloat(SignX | (InData.Facing & 0x7fff0000) >> 1);
-    OutData.Facing.y = asfloat(SignY | (InData.Facing & 0x00007fff) << 15);
-    
-    return OutData;
-}
-
-/*
- * Unpack the Height and Width from the HeightAndWidth field of the packed data.
- * @param HeightAndWidth The HeightAndWidth field of the packed data.
- * @return float2(Height, Width)
- */
-float2 UnpackHeightAndWidth(const uint HeightAndWidth)
-{
-    float2 HeightAndWidthF = 0;
-    HeightAndWidthF.x = asfloat((HeightAndWidth & 0x0000ffff) << 15);
-    HeightAndWidthF.y = asfloat((HeightAndWidth & 0xffff0000) >> 1);
-    
-    return HeightAndWidthF;
-}
-
-/*
- * Unpack the Facing from the Facing field of the packed data.
- * @param Facing The Facing field of the packed data.
- * @return the unpacked Facing.
- */
-float2 UnpackFacing(const uint Facing)
-{
-    float2 FacingF = 0;
-    
-    const uint SignX = Facing & 0x80000000;
-    const uint SignY = (Facing & 0x00008000) << 16;
-    FacingF.x = asfloat(SignX | (Facing & 0x7fff0000) >> 1);
-    FacingF.y = asfloat(SignY | (Facing & 0x00007fff) << 15);
-    
-    return FacingF;
-}
+#include "GrassCommon.ush"
 
 /*
 uint ComputeVertexBufferSize(const uint NumLod)
@@ -272,32 +31,34 @@ float3 RotateZ(const float Angle, const float3 Vec)
     return mul(Rot, Vec);
 }
 
-// https://math.stackexchange.com/questions/180418/calculate-rotation-matrix-to-align-vector-a-to-vector-b-in-3d
-float4x4 ComputeA2BRotationMatrix(const float3 A, const float3 B)
+// https://en.wikipedia.org/wiki/Rodrigues%27_rotation_formula
+float4x4 ComputeAToBRotationMatrix(const float3 A, const float3 B)
 {
     const float3 Vec = cross(A, B);
     const float Cosine = dot(A, B);
-    // const float Sine = length(Vec);
+    const float Sine = length(Vec);
 
-    const float3x3 SkewMat = SKEW_SYMMETRIC_CROSS_PRODUCT_MATRIX_3X3(Vec);
-    const float3x3 RotationMat =  IDENTITY_MATRIX_3X3 + SkewMat + mul(SkewMat, SkewMat) * (1 / (1 + Cosine));
+    const float3x3 SkewMat = CROSS_PRODUCT_MATRIX_3X3(Vec);
+    const float3x3 SkewMat2 = mul(SkewMat, SkewMat);
+    const float3x3 RotationMat =  IDENTITY_MATRIX_3X3 + SkewMat * Sine + SkewMat2 * (1 - Cosine);
     
     return float4x4(
             float4(RotationMat[0], 0),
             float4(RotationMat[1], 0),
             float4(RotationMat[2], 0),
-            float4(0, 0, 0, 1));
+            float4(0,    0,     0, 1));
 }
 
 float4x4 ComputeTransformRotationMatrix(FGrassData Data)
 {
     const float3 A = FORWARD_VECTOR;
-    const float3 B = float3(Data.Facing, 0);
+    const float3 B = Data.Facing;
+    const float Cosine = dot(A, B);
     
-    if (A.x + B.x == 0 && A.y + B.y == 0)
-        return ROTATION_MATRIX_Z_4X4(PI * 0.5);
+    if (Cosine == -1.0f)
+        return IDENTITY_MATRIX_4X4;
     
-    return transpose(ComputeA2BRotationMatrix(A, B));
+    return ComputeAToBRotationMatrix(normalize(A), normalize(B));
 }
 
 float4x4 ComputeTransformMatrixNoScale(FGrassData Data)
@@ -310,7 +71,9 @@ float4x4 ComputeTransformMatrixNoScale(FGrassData Data)
 
 float4x4 ComputeTransformMatrix(FGrassData Data)
 {
-    const float4x4 ScaleMatrix = SCALE_MATRIX_4X4(float3(Data.Width, Data.Width, Data.Height));
+    const float3 ScaleVector = float3(Data.Width, Data.Width, Data.Height);
+    
+    const float4x4 ScaleMatrix = SCALE_MATRIX_4X4(ScaleVector);
     const float4x4 RotationMatrix = ComputeTransformRotationMatrix(Data);
     const float4x4 TranslationMatrix = TRANSLATION_MATRIX_4X4(Data.Position);
 
@@ -364,60 +127,4 @@ bool IsInViewFrustum(in const float3 Position, in const float4x4 ViewProjectionM
     return NDCPosition.x >= 0.0f - Margin && NDCPosition.x <= 1.0f + Margin
         && NDCPosition.y >= 0.0f - Margin && NDCPosition.y <= 1.0f + Margin
         && NDCPosition.z >= 0.0f && NDCPosition.z <= 1.0f;
-}
-
-/**
- * Aggiunge il vertice @data al buffer @VertexBuffer 
- * in posizione @vertexPos
- */ 
-void AddPoint(
-    in RWStructuredBuffer<FGrassVertex> VertexBuffer,
-    in const uint VertexPos, in const FGrassVertex Data)
-{
-    VertexBuffer[VertexPos] = Data;
-}
-
-/**
- * Aggiunge il triangolo definiito dagli indici @idx1, @idx2 e @idx3 
- * al buffer @IndexBuffer partendo dalla posizione @indexPos
- */
-void AddTri(
-    in RWStructuredBuffer<uint> IndexBuffer, 
-    in const uint IndexPos, in const uint Idx1, in const uint Idx2, in uint Idx3)
-{
-    IndexBuffer[IndexPos + 0] = Idx1;
-    IndexBuffer[IndexPos + 1] = Idx2;
-    IndexBuffer[IndexPos + 2] = Idx3;
-}
-
-//  z
-//  |
-//  |
-//  |         * *         -
-//  |    y  *     *       |
-//  |   /  *              | height
-//  |  /  *               |
-//  | /  *                |
-//  |/   *                -
-//  +-------------------------- x
-//  0
-float3 ComputeInitialVelocity(in const float3 Seed, in const float Height)
-{
-    float3 V0 = Seed;
-    V0.xy += sign(V0.xy) * 1.5;
-    V0.z = sqrt(2 * GRAVITATIONAL_ACCELERATION * Height);
-    return V0;
-}
-
-uint ComputeLodSteps(const uint2 MinMaxLod, const float CutoffDistance, const float3 CameraPosition, const float3 PointPosition)
-{
-    const float Dist = distance(CameraPosition, PointPosition);
-    return ceil(lerp(MinMaxLod.x, MinMaxLod.y, GAUSSIAN_MAP(0, 0.4f, 2 * Dist / CutoffDistance)));
-}
-
-float3 MovePoint(const float3 Pi, const float3 Vi, const float T)
-{
-    float3 P = Pi + Vi * T;
-    P.z -= T * T * GRAVITATIONAL_ACCELERATION / 2;
-    return P;
 }

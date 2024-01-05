@@ -1,0 +1,89 @@
+#pragma once
+#include "/Engine/Public/Platform.ush"
+#include "GrassCommon.ush"
+#include "Noise.ush"
+
+// ************************* Input Data *************************
+float DeltaTime;
+StructuredBuffer<FPackedGrassData> GrassDataBuffer;
+
+// // Wind Parameters
+// float SamplingScale;
+//
+// Texture2D<float4> GrassWindStrengthMap;
+// SamplerState GrassWindStrengthSampler;
+
+// Collision Parameters
+float FadingFactor;
+StructuredBuffer<FSphere> SphereBuffer;
+
+// Gravity Parameters
+float4 GravityDirection;
+// uint Packed GravityDirection;
+// float GravityStrength;
+
+// if use custom center of gravity
+bool bIsCenterOfGravityEnabled;
+float4 GravityCenter;
+// float3 GravityCenter;
+// float GravityCenterStrength;
+
+
+// ************************* Output Data *************************
+RWTexture1D<float4> RWGrassForceMap;
+
+
+float4 GetWindForce(float3 Position)
+{
+	// float2 UV = frac(Position.xy / SamplingScale);
+	// float4 Force = GrassWindStrengthMap.Sample(GrassWindStrengthSampler, UV);
+	const float DirExt = fbm(Position * 0.01f);
+	float2 Direction = float2(cos(DirExt), sin(DirExt));
+	float Intensity = noise(Direction);
+	float4 Force = float4(Direction, 0, Intensity);
+	return Force;
+}
+
+[numthreads(1024, 1, 1)]
+void ComputePhysicsCS(uint3 DispatchThreadID : SV_DispatchThreadID)
+{
+	FGrassData Data = Unpack(GrassDataBuffer[DispatchThreadID.x]);
+	const float SpecWeight = .2f;
+	const float Mass = SpecWeight * Data.Height * Data.Width * .05f; // Area of a triangle
+	
+	const float3 CollisionDisplacement = 0; // TODO: Compute from collision spheres
+	
+	const float PreviousCollisionStrength = RWGrassForceMap[Data.Index].w;
+	const float3 PreviousDisplacement = RWGrassForceMap[Data.Index].xyz;
+
+	const float3 V2RestPosition = Data.Position + Data.Up * Data.Height;
+	const float3 V2PreviousPosition = V2RestPosition + PreviousDisplacement;
+	const float3 V0V2 = V2PreviousPosition - Data.Position;
+	
+	// Fading over time of the collision strength
+	const float CollisionStrength = max(PreviousCollisionStrength - FadingFactor * DeltaTime, 0);
+	RWGrassForceMap[Data.Index].w = CollisionStrength;
+	
+	// 1. Recovery Force
+	const float3 Recovery = (V2RestPosition - V2PreviousPosition) * Data.Stiffness * max(1 - CollisionStrength, 0.1f);
+
+	// 2. Gravity Force
+	const float3 GlobalGravity = Mass *
+		(  GravityDirection.xyz * GravityDirection.w * (1 - bIsCenterOfGravityEnabled)
+		 + normalize(GravityCenter.xyz - Data.Position) * GravityCenter.w * bIsCenterOfGravityEnabled);
+	const float3 FrontGravity = length(GlobalGravity) * .25f * Data.Facing;
+	const float3 Gravity = GlobalGravity + FrontGravity;
+
+	// 3. Wind Force
+	float4 WindForce = GetWindForce(Data.Position);
+	
+	const float DirectionalAlignment = 1 - abs(dot(WindForce.xyz, normalize(V0V2)));
+	const float HeightRatio = dot(V0V2, Data.Up) / Data.Height;
+	const float AlignmentValue = DirectionalAlignment * HeightRatio;
+	const float3 Wind = WindForce.xyz * WindForce.w * AlignmentValue;
+	
+	const float3 ResultForce = Gravity + Recovery + Wind;
+	
+	const float3 Displacement = ResultForce * DeltaTime + CollisionDisplacement;
+	RWGrassForceMap[Data.Index].xyz = Displacement;
+}
