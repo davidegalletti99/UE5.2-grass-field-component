@@ -32,7 +32,7 @@ float4 GravityCenter;
 
 
 // ************************* Output Data *************************
-RWTexture1D<float4> RWGrassForceMap;
+RWStructuredBuffer<float4> RWGrassForceMap;
 
 
 float4 GetWindForce(float3 Position)

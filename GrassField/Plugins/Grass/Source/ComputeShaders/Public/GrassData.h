@@ -71,26 +71,14 @@ namespace GrassMesh {
 	struct COMPUTESHADERS_API FGrassInstance
 	{
 		float Transform[4][4];
-		// FVector3f V0;
-		// FVector3f V1;
-		// FVector3f V2;
-		//
-		// FVector3f Up;
-		//
-		// float Width;
-		// FVector3f Facing;
+		FVector3f V1;
+		FVector3f V2;
 	};
 
 	struct COMPUTESHADERS_API FPackedGrassInstance
 	{
-		FVector3f V0;
-		FVector3f V1;
-		FVector3f V2;
-		
-		uint32 Up;
-
-		float Width;
-		uint32 Facing;
+		float Transform[4][4];
+		FUintVector Positions;
 	};
 
 	struct COMPUTESHADERS_API FGrassVertex
@@ -166,9 +154,13 @@ namespace GrassMesh {
 	}
 
 #define GRAVITATIONAL_ACCELERATION 9.81f
-#define QUAD_BEZ(P0, P1, P2, T) ( FMath::Lerp(P0, FMath::Lerp(P1, P2, T), T) )
-#define CUB_BEZ(P0, P1, P2, P3, T) ( FMath::Lerp(QUAD_BEZ(P0, P1, P2, T), QUAD_BEZ(P1, P2, P3, T), T) )
-	
+#define QUAD_BEZ(P0, P1, P2, T) \
+	( P0 * (1 - T) * (1 - T) + P1 * 2 * (1 - T) * T + P2 * T * T)
+#define CUB_BEZ(P0, P1, P2, P3, T) \
+	( P0 * (1 - T) * (1 - T) * (1 - T) + P1 * 3 * (1 - T) * (1 - T) * T + P2 * 3 * (1 - T) * T * T + P3 * T * T * T )
+
+	// TODO: Move this to a more appropriate place
+	// TODO: Add a proper lod index computation
 	inline float ComputeLodIndex(
 		const FVector& CullOrigin,
 		const FBox& Bounds,
@@ -179,8 +171,11 @@ namespace GrassMesh {
 		Distance -= Bounds.GetExtent().Size();
 		
 		const float LodPercentage = 1 - Distance / CutoffDistance;
+		const FVector2f MinMaxLodF = FVector2f(MinMaxLod.X, MinMaxLod.Y);
+
+		const float Delta = MinMaxLodF.Y - MinMaxLodF.X;
 		const uint32 Lod = FMath::Clamp(
-			CUB_BEZ(MinMaxLod.X, MinMaxLod.Y * .05, MinMaxLod.Y * .2, MinMaxLod.Y, LodPercentage),
+			QUAD_BEZ(MinMaxLodF.X, MinMaxLodF.X, MinMaxLodF.Y, LodPercentage),
 			MinMaxLod.X, MinMaxLod.Y);
 		return Lod;
 	}
@@ -206,11 +201,10 @@ namespace GrassMesh {
 		
 		const FVector3f InitialPosition = FVector3f(0, 0, 0);
 	    const FVector3f FinalPosition = MovePoint(InitialPosition, V0, V0.Z / GRAVITATIONAL_ACCELERATION);
-	    const FVector2f Facing = FVector2f(0, 1);
 		
 	    constexpr float Angle = UE_PI * 0.1;
-	    const FVector3f Normal = FVector3f(Facing, 0);
-	    const FVector3f Tangent = Normal.Cross(FVector3f(0, 0, 1));
+	    const FVector3f Normal = FVector3f(0, 1, 0);
+	    const FVector3f Tangent = FVector3f(1, 0, 0);
 		
 		const FVector3f Normal1 = Normal.RotateAngleAxis(Angle, FVector3f(0, 0, 1));
 		const FVector3f Normal2 = Normal.RotateAngleAxis(-Angle, FVector3f(0, 0, 1));

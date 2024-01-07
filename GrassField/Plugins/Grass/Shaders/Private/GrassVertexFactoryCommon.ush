@@ -224,35 +224,41 @@ float2 GetUV(FVertexFactoryInterpolantsVSToPS Interpolants, uint UVIndex)
     return UVIndex % 2 ? UVVector.zw : UVVector.xy;
 }
 #endif
+void CalculateVertex(inout FVertexFactoryInput Vertex, uint NumVertices, FGrassInstance Data)
+{
+	
+	// MaxSteps = 1 + LODIndex
+	const int MaxSteps = (NumVertices - 1) / 2;
+	const int CurrentStep = Vertex.VertexId / 2;
+	const int InStepVertexId = Vertex.VertexId % 2;
+	const float Percentage = float(CurrentStep) / MaxSteps;
 
-// void CalculateVertex(inout FVertexFactoryInput Vertex, uint NumVertices, FGrassInstance Data)
-// {
-// 	// MaxSteps = 1 + LODIndex
-// 	const int MaxSteps = (NumVertices - 1) / 2;
-// 	const int CurrentStep = Vertex.VertexId / 2;
-// 	const int InStepVertexId = Vertex.VertexId % 2;
-// 	const float Percentage = float(CurrentStep) / MaxSteps;
-//
-// 	//           0
-// 	//           *
-// 	//         /   \
-// 	//       /       \
-// 	//     /           \
-// 	// -1 *-------------* 1
-//     
-// 	// -1 if the vertex is on the left side
-// 	//  1 if it's on the right side
-// 	//  0 if it's the vertex at the center
-// 	const int VertexSide = (1 - 2 * InStepVertexId) * ceil(1 - Percentage);
-//
-// 	const float3 Normal = Data.Facing;
-// 	const float3 Tangent = normalize(cross(Normal, Data.Up));
-// 	const float Width = QUAD_BEZ(Data.Width / 2, Data.Width / 2 * 0.85, 0, Percentage);
-//
-// 	Vertex.Position = QUAD_BEZ(Data.V0, Data.V1, Data.V2, Percentage);
-// 	Vertex.Position += Tangent * Width * VertexSide;
-//  
-// 	Vertex.TangentX = Tangent;
-// 	Vertex.TangentZ = float4(Normal, 1);
-// 	Vertex.UV = float2(0.5 + VertexSide * 0.5, Percentage);
-// }
+	//           0
+	//           *
+	//         /   \
+	//       /       \
+	//     /           \
+	// -1 *-------------* 1
+    
+	// -1 if the vertex is on the left side
+	//  1 if it's on the right side
+	//  0 if it's the vertex at the center
+	const int VertexSide = (1 - 2 * InStepVertexId) * ceil(1 - Percentage);
+
+	
+	const float3 V0 = Data.Transform[3].xyz;
+	const float3 V1 = Data.V1;
+	const float3 V2 = Data.V2;
+	
+	// Computed from the derivative of the bezier curve
+	const float3 Tangent = normalize(DERIVATIVE_QUAD_BEZ(V0, V1, V2, Percentage));
+	const float3 Normal = normalize(cross(Tangent, cross(V1 - V0, V2 - V0)));
+	const float Width = 1;
+
+	Vertex.Position = QUAD_BEZ(V0, V1, V2, Percentage);
+	Vertex.Position += Tangent * Width * VertexSide;
+ 
+	Vertex.TangentX = Tangent;
+	Vertex.TangentZ = float4(Normal, 1);
+	Vertex.UV = float2(0.5 + VertexSide * 0.5, Percentage);
+}

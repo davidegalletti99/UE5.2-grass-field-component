@@ -53,7 +53,7 @@ namespace GrassMesh // GrassShaders
 			// SHADER_PARAMETER(float, GravityCenterStrength)
 		
 			// ************************* Output Data *************************
-			SHADER_PARAMETER_RDG_TEXTURE_UAV(RWTexture1D<float4>, RWGrassForceMap)
+			SHADER_PARAMETER_RDG_TEXTURE_UAV(RWStructuredBuffer<FVector4f>, RWGrassForceMap)
 		END_SHADER_PARAMETER_STRUCT()
 
 		static bool ShouldCompilePermutation(FGlobalShaderPermutationParameters const& Parameters)

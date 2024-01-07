@@ -31,6 +31,25 @@ float3 RotateZ(const float Angle, const float3 Vec)
     return mul(Rot, Vec);
 }
 
+
+float4x4 ComputeLookAtMatrix(const float3 Eye, const float3 Target, const float3 Up)
+{
+    const float3 ZAxis = normalize(Eye - Target);
+    const float3 XAxis = normalize(cross(Up, ZAxis));
+    const float3 YAxis = cross(ZAxis, XAxis);
+
+    float4x4 LookAtMatrix = RIGHT_HANDED_MATRIX_4X4(XAxis, YAxis, ZAxis);
+    LookAtMatrix[3] = float4(-dot(XAxis, Eye), -dot(YAxis, Eye), -dot(ZAxis, Eye), 1);
+    
+    return LookAtMatrix;
+}
+
+float4x4 ComputeAxisMatrixRotation(const float3x3 PrevAxis, const float3x3 NextAxis)
+{
+    const float3x3 RotationMatrix = mul(transpose(NextAxis), PrevAxis);
+    return RIGHT_HANDED_MATRIX_4X4(RotationMatrix[0], RotationMatrix[1], RotationMatrix[2]);
+}
+
 // https://en.wikipedia.org/wiki/Rodrigues%27_rotation_formula
 float4x4 ComputeAToBRotationMatrix(const float3 A, const float3 B)
 {
@@ -51,14 +70,11 @@ float4x4 ComputeAToBRotationMatrix(const float3 A, const float3 B)
 
 float4x4 ComputeTransformRotationMatrix(FGrassData Data)
 {
-    const float3 A = FORWARD_VECTOR;
-    const float3 B = Data.Facing;
-    const float Cosine = dot(A, B);
+    const float3 ZAxis = Data.Up;
+    const float3 YAxis = Data.Facing;
+    const float3 XAxis = cross(YAxis, ZAxis);
     
-    if (Cosine == -1.0f)
-        return IDENTITY_MATRIX_4X4;
-    
-    return ComputeAToBRotationMatrix(normalize(A), normalize(B));
+    return RIGHT_HANDED_MATRIX_4X4(XAxis, YAxis, ZAxis);
 }
 
 float4x4 ComputeTransformMatrixNoScale(FGrassData Data)

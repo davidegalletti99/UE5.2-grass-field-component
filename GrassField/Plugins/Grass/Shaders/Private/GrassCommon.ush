@@ -6,9 +6,30 @@
 #define BACKWARD_VECTOR float3(0, -1, 0)
 
 // Calcola la curva di Bézier quadratica
-#define QUAD_BEZ(p0, p1, p2, t) (lerp(p0, lerp(p1, p2, t), t))
-#define CUBIC_BEZ(p0, p1, p2, p3, t) (lerp(QUAD_BEZ(p0, p1, p2, t), QUAD_BEZ(p1, p2, p3, t), t))
-#define GAUSSIAN_MAP(m, s, x) (exp(-(x - m)*(x - m) / (2 * s * s)) / (s * SQ_2_PI))
+#define QUAD_BEZ(p0, p1, p2, t) \
+	(p0 * (1 - t) + 2 * p1 * t * (1 - t) + p2 * t * t)
+
+#define CUBIC_BEZ(p0, p1, p2, p3, t) \
+	(p0 * (1 - t) * (1 - t) * (1 - t) + 3 * p1 * t * (1 - t) * (1 - t) + 3 * p2 * t * t * (1 - t) + p3 * t * t * t)
+
+#define GAUSSIAN_MAP(m, s, x) \
+	(exp(-(x - m)*(x - m) / (2 * s * s)) / (s * SQ_2_PI))
+
+# define DERIVATIVE_QUAD_BEZ(p0, p1, p2, t) \
+	(2 * ((1 - t) * (p1 - p0) + t * (p2 - p1)))
+
+#define RIGHT_HANDED_MATRIX_3X3(C1, C2, C3) \
+		float3x3( \
+		float3(C1.x, C2.x, C3.x), \
+		float3(C1.y, C2.y, C3.y), \
+		float3(C1.z, C2.z, C3.z))
+
+#define RIGHT_HANDED_MATRIX_4X4(C1, C2, C3) \
+		float4x4( \
+		float4(C1.x, C2.x, C3.x, 0), \
+		float4(C1.y, C2.y, C3.y, 0), \
+		float4(C1.z, C2.z, C3.z, 0), \
+		float4(   0,    0,    0, 1))
 
 #define IDENTITY_MATRIX_3X3 float3x3( \
         float3(1, 0, 0), \
@@ -107,26 +128,14 @@ struct FGrassInstance
 {
     float4x4 Transform;
 	
-	// float3 V0;
-	// float3 V1;
-	// float3 V2;
-	//
-	// float3 Up;
-	//
-	// float Width;
-	// float2 Facing;
+	float3 V1;
+	float3 V2;
 };
 
 struct FPackedGrassInstance
 {
-	float3 V0;
-	float3 V1;
-	float3 V2;
-
-	uint Up;
-    
-	float Width;
-	uint Facing;
+    float4x4 Transform;
+	uint4 Positions;
 };
 
 /**
@@ -292,4 +301,33 @@ FGrassData Unpack(const FPackedGrassData InData)
 	OutData.Stiffness = InData.Stiffness;
 	
     return OutData;
+}
+
+
+uint4 PackPosition(const float3 V0, const float3 V1, const float3 V2)
+{
+	const float3 V0V1 = V1 - V0;
+	const float3 V0V2 = V2 - V0;
+	const float V0V1Length = length(V0V1);
+	const float V0V2Length = length(V0V2);
+
+	uint4 Out = 0;
+	Out.x = PackNormal(normalize(V0V1)).x;
+	Out.y = asuint(V0V1Length);
+	Out.z = PackNormal(normalize(V0V2)).x;
+	Out.w = asuint(V0V2Length);
+	
+	return Out;
+}
+
+float3x3 UnpackPosition(const uint4 PackedPosition, const float4x4 Transform)
+{
+	const float3 V0V1 = UnpackNormal(PackedPosition.x).xyz * asfloat(PackedPosition.y);
+	const float3 V0V2 = UnpackNormal(PackedPosition.z).xyz * asfloat(PackedPosition.w);
+	
+	float3x3 Out = 0;
+	Out[0] = Transform[3];
+	Out[1] = Out[0] + V0V1;
+	Out[2] = Out[0] + V0V2;
+	return Out;
 }

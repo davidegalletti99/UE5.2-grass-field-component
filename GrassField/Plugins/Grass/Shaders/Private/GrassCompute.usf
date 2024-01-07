@@ -20,6 +20,9 @@ RWStructuredBuffer<FGrassInstance> RWInstanceBuffer;
 // IndirectArgsBuffer
 RWStructuredBuffer<uint> RWIndirectArgsBuffer;
 
+// GrassForceMap
+RWStructuredBuffer<float4> GrassForceMap;
+
 /**
  * Initialise the indirect args for the final culled indirect draw call.
  */
@@ -43,22 +46,46 @@ void ComputeInstanceGrassDataCS(
     if (GrassIndex >= GrassDataSize)
         return;
     
-    FGrassData Data = Unpack(GrassDataBuffer[GrassIndex]);
+    const FGrassData Data = Unpack(GrassDataBuffer[GrassIndex]);
     
     const bool InView = IsInViewFrustum(Data.Position, VP_MATRIX, 0.2f);
     const bool WithinDistance = distance(CameraPosition.xyz, Data.Position) < CutoffDistance;
     
     if (InView && WithinDistance)
     {
-        FGrassInstance Instance;
+        FGrassInstance Instance = (FGrassInstance) 0;
         Instance.Transform = transpose(ComputeTransformMatrix(Data));
-        
-        // Instance.V0 = float3(0, 0, 0);
-        // Instance.V1 = float3(0, 0, 1);
-        // Instance.V2 = Instance.V1;
-        // Instance.Up = float3(0, 0, 1);
-        // Instance.Width = 1;
-        // Instance.Facing = Data.Facing;
+
+        // const float V0 = Data.Position;
+        // const float V2Rest = V0 + Data.Up * Data.Height;
+        // float V2 = V2Rest + GrassForceMap[Index].xyz;
+        // V2 -= Data.Up * min(dot(Data.Up, V2 - V0), 0); // to avoid terrain clipping
+        //
+        // const float DefaultInclinationFactor = 0.5f;
+        // const float LProj = length(V2 - V0 - Data.Up * dot(V2 - V0, Data.Up));
+        // const float HeightPercentage = LProj / Data.Height;
+        // const float V1 =
+        //     V0 + Data.Height * Data.Up * max(1 - HeightPercentage, DefaultInclinationFactor * max(HeightPercentage, 1));
+        //
+        // // L0 = Distance from the first and the last control point
+        // const float L0 = length(V0 - V2);
+        // // L1 = Sum of the distance between the consecutive control points
+        // const float L1 = length(V1 - V0) + length(V2 - V1);
+        //
+        // // Bezier curve length approximation
+        // // L = (2 * L0 + (n - 1) * L1) / (n + 1)
+        // const float L = (2 * L0 + L1) / 3;
+        //
+        // // Ratio between the Height of the blade and the Length of the Bezier Curve
+        // const float R = Data.Height / L;
+        //
+        // // The correction is applied to each segment of the Bezier Curve
+        // const float V1Correction = V0 + R * (V1 - V0);
+        // const float V2Correction = V1Correction + R * (V2 - V1);
+        //
+        // Instance.V0 = V0;
+        // Instance.V2 = V1Correction;
+        // Instance.V1 = V2Correction;
         
     
         uint WriteIndex;

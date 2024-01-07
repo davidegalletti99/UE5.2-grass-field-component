@@ -197,14 +197,11 @@ void UGrassFieldComponent::SampleGrassData()
 			GetWorld()->LineTraceSingleByProfile(Hit, Start, End, SurfaceMesh->GetCollisionProfileName(), Params)
 			&& Hit.GetActor() == Terrain)
 		{
-			FVector Up = Hit.ImpactNormal;
+			FVector Up = Hit.ImpactNormal + FVector(0, 0, 2);
+			Up.Normalize();
 			FVector Position = Hit.ImpactPoint;
 			
 			GrassMesh::FPackedGrassData Data = GrassUtils::ComputeData(Position, Up, MinHeight, MaxHeight, MinWidth, MaxWidth);
-			// DrawDebugLine(GetWorld(), Position, Position + Up * 12, FColor::Red, false, 20, 0, 1);
-
-			// GrassMesh::FGrassData GrassData = GrassMesh::FGrassData(Data);
-			// DrawDebugLine(GetWorld(), Position, Position + static_cast<FVector>(GrassData.Facing) * 5, FColor::Green, false, 20, 0, 1);
 			for (const auto& Section : Sections)
 			{
 				if (Section->AddGrassData(Data))
