@@ -50,6 +50,39 @@ float4x4 ComputeAxisMatrixRotation(const float3x3 PrevAxis, const float3x3 NextA
     return RIGHT_HANDED_MATRIX_4X4(RotationMatrix[0], RotationMatrix[1], RotationMatrix[2]);
 }
 
+// https://gamedev.stackexchange.com/questions/26084/how-to-get-the-rotation-matrix-to-transform-between-two-3d-cartesian-coordinate
+// compute the rotation matrix that transform PrevAxis to NextAxis (No Translation)
+float3x3 ComputeCoordinateSystemRotationMatrix(const float3x3 PrevAxis, const float3x3 NextAxis)
+{
+    // Rotation matrices are orthonormal, so we can use transpose instead of inverse
+    const float3x3 RotationMatrix = mul(NextAxis, transpose(PrevAxis));
+    return RotationMatrix;
+}
+
+// compute the rotation matrix that transform PrevAxis to NextAxis
+float4x4 ComputeCoordinateSystemRotationMatrix(const float4x4 PrevAxis, const float4x4 NextAxis)
+{
+    const float3 NextAxisTranslation = EXTRACT_COLUMN(NextAxis, w);
+    const float3 PrevAxisTranslation = EXTRACT_COLUMN(PrevAxis, w);
+
+    const float3 FromPrevToNextTranslation = NextAxisTranslation - PrevAxisTranslation;
+
+    const float3x3 NextAxisRotation = EXTRACT_MATRIX_3X3(NextAxis);
+    const float3x3 PrevAxisRotation = EXTRACT_MATRIX_3X3(PrevAxis);
+
+    const float3 NextXAxis = EXTRACT_COLUMN(NextAxisRotation, x);
+    const float3 NextYAxis = EXTRACT_COLUMN(NextAxisRotation, y);
+    const float3 NextZAxis = EXTRACT_COLUMN(NextAxisRotation, z);
+
+    const float3x3 RotationMatrix = ComputeCoordinateSystemRotationMatrix(PrevAxisRotation, NextAxisRotation);
+    
+    return float4x4(
+            float4(RotationMatrix[0], -dot(NextXAxis, FromPrevToNextTranslation)),
+            float4(RotationMatrix[1], -dot(NextYAxis, FromPrevToNextTranslation)),
+            float4(RotationMatrix[2], -dot(NextZAxis, FromPrevToNextTranslation)),
+            float4(0,      0,      0,                                         1));
+}
+
 // https://en.wikipedia.org/wiki/Rodrigues%27_rotation_formula
 float4x4 ComputeAToBRotationMatrix(const float3 A, const float3 B)
 {
@@ -68,7 +101,7 @@ float4x4 ComputeAToBRotationMatrix(const float3 A, const float3 B)
             float4(0,    0,     0, 1));
 }
 
-float4x4 ComputeTransformRotationMatrix(FGrassData Data)
+float4x4 ComputeTransformRotationMatrix(const FGrassData Data)
 {
     const float3 ZAxis = Data.Up;
     const float3 YAxis = Data.Facing;
@@ -97,6 +130,40 @@ float4x4 ComputeTransformMatrix(FGrassData Data)
     const float4x4 Result = mul(TranslationMatrix, ScaleAndRotation);
     
     return Result;
+}
+
+float4x4 ComputeInverseTransformMatrix(FGrassData Data)
+{
+    const float3 ScaleVector = 1 / float3(Data.Width, Data.Width, Data.Height);
+    
+    const float4x4 ScaleMatrix = SCALE_MATRIX_4X4(ScaleVector);
+    const float4x4 RotationMatrix = transpose(ComputeTransformRotationMatrix(Data));
+    const float4x4 TranslationMatrix = TRANSLATION_MATRIX_4X4(-Data.Position);
+
+    const float4x4 TranslationAndRotation = mul(RotationMatrix, TranslationMatrix);
+    const float4x4 Result = mul(ScaleMatrix, TranslationAndRotation);
+    
+    return Result;
+}
+
+float4x4 ComputeInverseNoTranslationTransformMatrix(FGrassData Data)
+{
+    const float3 ScaleVector = 1 / float3(Data.Width, Data.Width, Data.Height);
+    
+    const float4x4 ScaleMatrix = SCALE_MATRIX_4X4(ScaleVector);
+    const float4x4 RotationMatrix = transpose(ComputeTransformRotationMatrix(Data));
+    const float4x4 Result = mul(ScaleMatrix, RotationMatrix);
+    
+    return Result;
+}
+
+void ComputeTransformationMatrixAndInverse(
+    out float4x4 TransformationMatrix,
+    out float4x4 InvTransformationMatrix,
+    FGrassData Data)
+{
+    TransformationMatrix = ComputeTransformMatrix(Data);
+    InvTransformationMatrix = ComputeInverseTransformMatrix(Data);
 }
 
 void ComputeFrustumPlanes(

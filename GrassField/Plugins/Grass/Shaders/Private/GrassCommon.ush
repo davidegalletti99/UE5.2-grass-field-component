@@ -18,6 +18,15 @@
 # define DERIVATIVE_QUAD_BEZ(p0, p1, p2, t) \
 	(2 * ((1 - t) * (p1 - p0) + t * (p2 - p1)))
 
+#define EXTRACT_COLUMN(Matrix, ColumnName) \
+	float3(Matrix[0].ColumnName, Matrix[1].ColumnName, Matrix[2].ColumnName)
+
+#define EXTRACT_MATRIX_3X3(Matrix) \
+		float3x3( \
+		Matrix[0].xyz, \
+		Matrix[1].xyz, \
+		Matrix[2].xyz)
+
 #define RIGHT_HANDED_MATRIX_3X3(C1, C2, C3) \
 		float3x3( \
 		float3(C1.x, C2.x, C3.x), \
@@ -44,7 +53,7 @@
 
 #define ROTATION_MATRIX_Z_3X3(angle) float3x3( \
         float3(cos(angle), -sin(angle), 0), \
-        float3(sin(angle), cos(angle),  0), \
+        float3(sin(angle),  cos(angle), 0), \
         float3(         0,          0,  1))
 
 #define ROTATION_MATRIX_Z_4X4(angle) float4x4( \
@@ -64,13 +73,13 @@
         float4(1, 0, 0, vec.x), \
         float4(0, 1, 0, vec.y), \
         float4(0, 0, 1, vec.z), \
-        float4(0, 0, 0,      1))
+        float4(0, 0, 0,     1))
 
 #define SCALE_MATRIX_4X4(vec) float4x4( \
         float4(vec.x,      0,      0, 0), \
         float4(     0, vec.y,      0, 0), \
         float4(     0,      0, vec.z, 0), \
-        float4(     0,      0,      0, 1))
+        float4(     0,      0,     0, 1))
 
 struct FSphere
 {
@@ -127,6 +136,7 @@ struct FPackedGrassVertex
 struct FGrassInstance
 {
     float4x4 Transform;
+	//float4x4 InverseTransform;
 	
 	float3 V1;
 	float3 V2;
@@ -326,7 +336,7 @@ float3x3 UnpackPosition(const uint4 PackedPosition, const float4x4 Transform)
 	const float3 V0V2 = UnpackNormal(PackedPosition.z).xyz * asfloat(PackedPosition.w);
 	
 	float3x3 Out = 0;
-	Out[0] = Transform[3];
+	Out[0] = Transform[3].xyz;
 	Out[1] = Out[0] + V0V1;
 	Out[2] = Out[0] + V0V2;
 	return Out;
