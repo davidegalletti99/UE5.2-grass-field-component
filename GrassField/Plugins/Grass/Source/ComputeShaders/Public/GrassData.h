@@ -36,20 +36,6 @@ namespace GrassUtils
 
 		return Conv.Out;
 	}
-
-	struct FDisplacementInfo
-	{
-		FVector3f PrevDisplacement;
-		FVector3f CurrDisplacement;
-	};
-
-	struct FGrassBodyInfo
-	{
-		FVector3f Velocity;
-		FVector3f Acceleration;
-		FVector3f Position;
-		float Mass;
-	};
 	
 	struct COMPUTESHADERS_API FGrassData
 	{
@@ -94,20 +80,9 @@ namespace GrassUtils
 	struct COMPUTESHADERS_API FGrassInstance
 	{
 		float RotScaleMatrix[3][3];
-		
-		FVector3f V0;
-		FVector3f V1;
-		FVector3f V2;
-		
-		FVector3f PrevV1;
-		FVector3f PrevV2;
+		FVector3f InstanceOrigin;
 	};
 
-	struct COMPUTESHADERS_API FPackedGrassInstance
-	{
-		float Transform[4][4];
-		FUintVector Positions;
-	};
 
 	struct COMPUTESHADERS_API FGrassVertex
 	{
@@ -230,9 +205,10 @@ namespace GrassUtils
 	    for (uint32 i = 0; i <= LodStep; i++, VertexIndex += 2, PrimitiveIndex += 6)
 	    {
 	    
-	        const float Percentage = static_cast<float>(i) / (LodStep + 1);
-	        const float CurrentFactor = QUAD_BEZ(1, 1 * 0.85, 0, Percentage);
-	        const FVector3f CurrentPosition = QUAD_BEZ(InitialPosition, InitialPosition, FinalPosition, Percentage);
+	        const float Percentage = i / static_cast<float>(LodStep + 1);
+	        const float CurrentFactor = QUAD_BEZ(1.0f, 0.85f, 0.0f, Percentage);
+	        const FVector3f CurrentPosition =
+	        	QUAD_BEZ(InitialPosition, FinalPosition, FinalPosition, Percentage);
 	        
 	        const float CurrentHalfWidth = CurrentFactor * MaxWidth / 2;
 	        

@@ -48,16 +48,6 @@ namespace GrassUtils
 			InBuffers.GrassDataBufferSRV = RHICreateShaderResourceView(InBuffers.GrassDataBuffer);
 		}
 		{
-			FRHIResourceCreateInfo CreateInfo(TEXT("FGrass.GrassForceMap"));
-			constexpr int32 DisplacementsSize = sizeof(GrassUtils::FGrassBodyInfo);
-			const int32 GrassDataBufferSize = GrassDataNum * DisplacementsSize;
-			InBuffers.GrassForceMap = RHICreateStructuredBuffer(
-				DisplacementsSize, GrassDataBufferSize,
-				BUF_UnorderedAccess | BUF_ShaderResource, ERHIAccess::SRVMask, CreateInfo);
-			InBuffers.GrassForceMapUAV = RHICreateUnorderedAccessView(InBuffers.GrassForceMap, PF_A32B32G32R32F);
-			InBuffers.GrassForceMapSRV = RHICreateShaderResourceView(InBuffers.GrassForceMap);
-		}
-		{
 			FRHIResourceCreateInfo CreateInfo(TEXT("FGrass.InstanceBuffer"));
 			constexpr int32 InstanceSize = sizeof(GrassUtils::FGrassInstance);
 			const int32 InstanceBufferSize = GrassDataNum * InstanceSize;
@@ -121,72 +111,6 @@ namespace GrassUtils
 			OutResources.CulledGrassDataBufferSRV = GraphBuilder.CreateSRV(OutResources.CulledGrassDataBuffer);
 			OutResources.CulledGrassDataBufferUAV = GraphBuilder.CreateUAV(OutResources.CulledGrassDataBuffer);
 		}
-	}
-
-	void AddPass_InitForceMap(
-		FRDGBuilder& GraphBuilder,
-		const FGlobalShaderMap* InGlobalShaderMap,
-		const FPersistentBuffers& InOutputResources,
-		const FProxyDesc& ProxyDesc)
-	{
-		GrassUtils::FInitForceMap_CS::FParameters* PassParameters =
-			GraphBuilder.AllocParameters<GrassUtils::FInitForceMap_CS::FParameters>();
-		const GrassUtils::FInitForceMap_CS::FPermutationDomain PermutationVector;
-		const TShaderMapRef<GrassUtils::FInitForceMap_CS> ComputeShader(InGlobalShaderMap, PermutationVector);
-
-		const int32 GrassDataSize = ProxyDesc.GrassData->Num();
-		PassParameters->GrassDataSize = GrassDataSize;
-		PassParameters->GrassDataBuffer = InOutputResources.GrassDataBufferSRV;
-		PassParameters->RWGrassForceMap = InOutputResources.GrassForceMapUAV;
-
-
-		const FIntVector GroupCount = FIntVector(
-			FMath::CeilToInt(GrassDataSize / static_cast<float>(MAX_THREADS_PER_GROUP)),
-			1,
-			1);
-		
-		FComputeShaderUtils::AddPass<GrassUtils::FInitForceMap_CS>(
-			GraphBuilder,
-			RDG_EVENT_NAME("InitForceMap"),
-			ComputeShader, PassParameters, GroupCount);
-	}
-	
-	/** Cull quads and write to the final output buffer. */
-	void AddPass_ComputePhysicsModel(
-		FRDGBuilder& GraphBuilder,
-		const FGlobalShaderMap* InGlobalShaderMap,
-		const FVolatileResources& InVolatileResources,
-		const FPersistentBuffers& InOutputResources,
-		const FProxyDesc& ProxyDesc)
-	{
-		GrassUtils::FComputePhysics_CS::FParameters* PassParameters =
-			GraphBuilder.AllocParameters<GrassUtils::FComputePhysics_CS::FParameters>();
-		const GrassUtils::FComputePhysics_CS::FPermutationDomain PermutationVector;
-		const TShaderMapRef<GrassUtils::FComputePhysics_CS> ComputeShader(InGlobalShaderMap, PermutationVector);
-
-		const int32 GrassDataSize = ProxyDesc.GrassData->Num();
-		PassParameters->Time = static_cast<float>(FApp::GetGameTime());
-		PassParameters->DeltaTime = static_cast<float>(FApp::GetDeltaTime());
-
-		PassParameters->IndirectArgsBuffer = InOutputResources.IndirectArgsBufferSRV;
-		PassParameters->CulledGrassDataBuffer = InVolatileResources.CulledGrassDataBufferSRV;
-
-		PassParameters->GravityDirection = FVector4f(0, 0, -1, 9.81f);
-
-		PassParameters->bIsCenterOfGravityEnabled = 0;
-		PassParameters->GravityCenter = FVector4f(0, 0, 0, 0);
-
-		PassParameters->RWGrassForceMap = InOutputResources.GrassForceMapUAV;
-
-		const FIntVector GroupCount = FIntVector(
-			FMath::CeilToInt(GrassDataSize / static_cast<float>(MAX_THREADS_PER_GROUP)),
-			1,
-			1);
-		
-		FComputeShaderUtils::AddPass<GrassUtils::FComputePhysics_CS>(
-			GraphBuilder,
-			RDG_EVENT_NAME("ComputePhysicsModel"),
-			ComputeShader, PassParameters, GroupCount);
 	}
 
 	/** Initialise the draw indirect buffer. */
@@ -258,7 +182,6 @@ namespace GrassUtils
 		PassParameters->RWIndirectArgsBuffer = InOutputResources.IndirectArgsBufferUAV;
 		PassParameters->CulledGrassDataBuffer = InVolatileResources.CulledGrassDataBufferSRV;
 		PassParameters->RWInstanceBuffer = InOutputResources.InstanceBufferUAV;
-		PassParameters->GrassForceMap = InOutputResources.GrassForceMapSRV;
 		
 		const int32 GrassDataNum = ProxyDesc.GrassData->Num();
 		const FIntVector GroupCount = FIntVector(FMath::CeilToInt(GrassDataNum / static_cast<float>(MAX_THREADS_PER_GROUP)), 1, 1);
@@ -744,21 +667,10 @@ void FGrassInstancingRendererExtension::SubmitWork(FRDGBuilder& GraphBuilder)
 			ProxyDesc, MainViewDesc, VolatileResources);
 
 		// Build graph
-		if (bIsNewProxy)
-			GrassUtils::AddPass_InitForceMap(
-				GraphBuilder, GetGlobalShaderMap(GMaxRHIFeatureLevel),
-				Buffers[WorkDescs[WorkIndex].BufferIndex], ProxyDesc);
-		
-		
 		GrassUtils::Add_CullInstances(
 			GraphBuilder, GetGlobalShaderMap(GMaxRHIFeatureLevel),
 			VolatileResources, Buffers[WorkDescs[WorkIndex].BufferIndex],
 			ProxyDesc, MainViewDesc);
-		
-		GrassUtils::AddPass_ComputePhysicsModel(
-			GraphBuilder, GetGlobalShaderMap(GMaxRHIFeatureLevel),
-			VolatileResources, Buffers[WorkDescs[WorkIndex].BufferIndex],
-			ProxyDesc);
 		
 		GrassUtils::AddPass_ComputeInstanceData(
 			GraphBuilder, GetGlobalShaderMap(GMaxRHIFeatureLevel),

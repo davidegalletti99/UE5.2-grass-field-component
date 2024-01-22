@@ -39,20 +39,14 @@ FVertexFactoryIntermediates GetVertexFactoryIntermediates(FVertexFactoryInput In
 {
     FVertexFactoryIntermediates Intermediates = (FVertexFactoryIntermediates)0;
     Intermediates.SceneData = VF_GPUSCENE_GET_INTERMEDIATES(Input);
-    
-    FPrimitiveSceneData PrimitiveData = GetPrimitiveData(Intermediates);
 #if USE_INSTANCING
     const FGrassInstance InstanceData = InstanceBuffer[Input.InstanceId];
     
-    Intermediates.VertexPosition = // Input.Position;
-        GetVertexPosition(InstanceData, Input.VertexId, InstanceNumVertices);
-    Intermediates.PrevVertexPosition = // Input.Position;
-        GetPrevVertexPosition(InstanceData, Input.VertexId, InstanceNumVertices);
     
     Intermediates.InstanceTransform1 = float4(InstanceData.RotScaleMatrix[0], 0);
     Intermediates.InstanceTransform2 = float4(InstanceData.RotScaleMatrix[1], 0);
     Intermediates.InstanceTransform3 = float4(InstanceData.RotScaleMatrix[2], 0);
-    Intermediates.InstanceOrigin     = float4(InstanceData.V0, 1.0);
+    Intermediates.InstanceOrigin     = float4(InstanceData.InstanceOrigin, 1.0);
 
      
 #endif // USE_INSTANCING
@@ -88,7 +82,7 @@ FMaterialVertexParameters GetMaterialVertexParameters(
     
 	float4x4 InstanceToLocal = GetInstanceTransform(Intermediates);
 	Result.InstanceLocalToWorld = LWCMultiply(InstanceToLocal, PrimitiveData.LocalToWorld);
-	Result.InstanceLocalPosition = Intermediates.VertexPosition;
+	Result.InstanceLocalPosition = Input.Position;
 	Result.InstanceId = GetInstanceId(Input.InstanceId);
 	Result.PrevFrameLocalToWorld = LWCMultiply(GetInstancePrevTransform(Intermediates), PrimitiveData.PreviousLocalToWorld);
 	// Calculate derived world to local
@@ -218,7 +212,7 @@ float4 VertexFactoryGetWorldPosition(FVertexFactoryInput Input, FVertexFactoryIn
     
 #if USE_INSTANCING
     
-    return CalcWorldPosition(float4(Intermediates.VertexPosition, 1.0), GetInstanceTransform(Intermediates), LocalToWorld);
+    return CalcWorldPosition(float4(Input.Position, 1.0), GetInstanceTransform(Intermediates), LocalToWorld);
 #else
     return CalcWorldPosition(float4(Input.Position, 1.0), LocalToWorld);
 #endif	// USE_INSTANCING
@@ -250,7 +244,7 @@ float4 VertexFactoryGetPreviousWorldPosition(FVertexFactoryInput Input, FVertexF
 #if USE_INSTANCING
     {
 		const float4x4 InstanceTransform = GetInstancePrevTransform(Intermediates);
-		PrevLocalPosition = mul(float4(Intermediates.PrevVertexPosition, 1.0f), InstanceTransform);
+		PrevLocalPosition = mul(float4(Input.Position, 1.0f), InstanceTransform);
     }
 #endif
     return TransformPreviousLocalPositionToTranslatedWorld(PrevLocalPosition.xyz, PreviousLocalToWorld);

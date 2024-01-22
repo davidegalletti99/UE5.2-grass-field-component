@@ -39,9 +39,6 @@ struct FVertexFactoryIntermediates
 	float4 InstanceTransform1;
 	float4 InstanceTransform2;
 	float4 InstanceTransform3;
-
-	float3 VertexPosition;
-	float3 PrevVertexPosition;
 #endif // USE_INSTANCING
 };
 
@@ -257,19 +254,3 @@ float3 GetPosition(const float3 V0, const float3 V1, const float3 V2, const floa
 	return VertexPosition;
 }
 
-float3 GetVertexPosition(const FGrassInstance Data, const uint VertexId, const uint NumVertices)
-{
-	const float3 V0 = 0;
-	const float3 V1 = Data.V1;
-	const float3 V2 = Data.V2;
-	return GetPosition(V0, V1, V2, Data.RotScaleMatrix, VertexId, NumVertices);
-}
-
-float3 GetPrevVertexPosition(const FGrassInstance Data, const uint VertexId, const uint NumVertices)
-{
-	const float3 V0 = 0;
-	const float3 V1 = Data.PrevV1;
-	const float3 V2 = Data.PrevV2;
-
-	return GetPosition(V0, V1, V2, Data.RotScaleMatrix, VertexId, NumVertices);
-}

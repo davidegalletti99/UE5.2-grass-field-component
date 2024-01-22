@@ -12,9 +12,6 @@ float3 CameraPosition;
 StructuredBuffer<uint> IndirectArgsBuffer;
 RWStructuredBuffer<uint> RWIndirectArgsBuffer;
 
-// GrassForceMap
-StructuredBuffer<FGrassBodyInfo> GrassForceMap;
-
 // GrassDataBuffer
 StructuredBuffer<FPackedGrassData> GrassDataBuffer;
 
@@ -25,8 +22,6 @@ RWStructuredBuffer<FPackedGrassData> RWCulledGrassDataBuffer;
 // InstanceBuffer
 RWStructuredBuffer<FGrassInstance> RWInstanceBuffer;
 
-static float DefaultInclinationFactor = .5f;
-
 /**
  * Initialise the indirect args for the final culled indirect draw call.
  */
@@ -34,7 +29,7 @@ static float DefaultInclinationFactor = .5f;
 void InitIndirectArgsCS()
 {
     RWIndirectArgsBuffer[0] = NumIndices;
-    RWIndirectArgsBuffer[1] = 0; // Increment this counter during ComputeGrassMeshCS.
+    RWIndirectArgsBuffer[1] = 0; // Increment this counter during CullInstancesCS.
     RWIndirectArgsBuffer[2] = 0;
     RWIndirectArgsBuffer[3] = 0;
     RWIndirectArgsBuffer[4] = 0;
@@ -66,37 +61,6 @@ void CullInstancesCS(
     }
 }
 
-void AdjustPositions(out float3 V1Corr, out float3 V2Corr, const float3 V2, in const FGrassData Data)
-{
-    const float3 V0 = Data.Position; 
-    const float3 Up = Data.Up;
-    const float Height = Data.Height;
-        
-    float3 V2Adjust = V2;
-    V2Adjust -= Up * min(dot(V2Adjust - V0, Up), 0); // to avoid terrain clipping
-        
-    const float LProj = length((V2Adjust - V0) - Up * dot(V2Adjust - V0, Up));
-    const float HeightPercentage = LProj / Height;
-    const float3 V1 =
-        V0 + Up * Height * max(1 - HeightPercentage, DefaultInclinationFactor * max(HeightPercentage, 1));
-        
-    // L0 = Distance from the first and the last control point
-    const float L0 = length(V2Adjust - V0);
-    // L1 = Sum of the distance between the consecutive control points
-    const float L1 = length(V1 - V0) + length(V2Adjust - V1);
-        
-    // Bezier curve length approximation
-    // L = (2 * L0 + (n - 1) * L1) / (n + 1)
-    const float L = (2 * L0 + L1) / 3;
-        
-    // Ratio between the Height of the blade and the Length of the Bezier Curve
-    const float R = Height / L;
-        
-    // The correction is applied to each segment of the Bezier Curve
-    V1Corr = V0 + R * (V1 - V0);
-    V2Corr = V1Corr + R * (V2Adjust - V1);
-}
-
 [numthreads(MAX_THREADS_PER_GROUP, 1, 1)]
 void ComputeInstanceGrassDataCS(
     uint3 DispatchThreadId : SV_DispatchThreadID)
@@ -108,23 +72,8 @@ void ComputeInstanceGrassDataCS(
     const FGrassData Data = Unpack(CulledGrassDataBuffer[GrassIndex]);
     
     FGrassInstance Instance = (FGrassInstance) 0;
-    
-    Instance.V0 = Data.Position;
     Instance.RotScaleMatrix = transpose(ComputeTransformMatrixNoTranslation(Data));
-    const float4x4 InvTransform = ComputeInverseTransformMatrix(Data);
-    
-    const float3 CurrDisplacement = GrassForceMap[Data.Index].Position;
-    const float3 PrevDisplacement = GrassForceMap[Data.Index].Position;
-
-    float3 V1Correction, V2Correction, PrevV1Correction, PrevV2Correction;
-    AdjustPositions(V1Correction, V2Correction, CurrDisplacement, Data);
-    AdjustPositions(PrevV1Correction, PrevV2Correction, PrevDisplacement, Data);
-    
-    Instance.V1 = mul(InvTransform, float4(V1Correction, 1)).xyz;
-    Instance.V2 = mul(InvTransform, float4(V2Correction, 1)).xyz;
-
-    Instance.PrevV1 = mul(InvTransform, float4(PrevV1Correction, 1)).xyz;
-    Instance.PrevV2 = mul(InvTransform, float4(PrevV2Correction, 1)).xyz;
+    Instance.InstanceOrigin = Data.Position;
     
     RWInstanceBuffer[GrassIndex] = Instance;
 }

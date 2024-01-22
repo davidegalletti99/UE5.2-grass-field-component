@@ -88,20 +88,6 @@
         float4(     0,      0,     0, 1))
 
 
-struct FDisplacementInfo
-{
-	float3 PrevDisplacement;
-	float3 CurrDisplacement;
-};
-
-struct FGrassBodyInfo
-{
-	float Mass;
-	float3 Velocity;
-	float3 Acceleration;
-	float3 Position;
-};
-
 /** 
  * Struct per la generazione dei fili d'erba
  */
@@ -151,19 +137,7 @@ struct FPackedGrassVertex
 struct FGrassInstance
 {
 	float3x3 RotScaleMatrix;
-	
-	float3 V0;
-	float3 V1;
-	float3 V2;
-	
-	float3 PrevV1;
-	float3 PrevV2;
-};
-
-struct FPackedGrassInstance
-{
-    float4x4 Transform;
-	uint4 Positions;
+	float3 InstanceOrigin;
 };
 
 /**
