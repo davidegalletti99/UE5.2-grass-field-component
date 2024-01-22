@@ -4,9 +4,14 @@
 #include "Noise.ush"
 
 // ************************* Input Data *************************
+float Time;
 float DeltaTime;
-uint GrassDataNumber;
+
+StructuredBuffer<uint> IndirectArgsBuffer;
+
+uint GrassDataSize;
 StructuredBuffer<FPackedGrassData> GrassDataBuffer;
+StructuredBuffer<FPackedGrassData> CulledGrassDataBuffer;
 
 // // Wind Parameters
 // float SamplingScale;
@@ -14,106 +19,183 @@ StructuredBuffer<FPackedGrassData> GrassDataBuffer;
 // Texture2D<float4> GrassWindStrengthMap;
 // SamplerState GrassWindStrengthSampler;
 
-// Collision Parameters
-float FadingFactor;
-uint SpheresNumber;
-StructuredBuffer<FSphere> SphereBuffer;
 
 // Gravity Parameters
 float4 GravityDirection;
-// uint PackedGravityDirection;
-// float GravityStrength;
 
 // if use custom center of gravity
 int bIsCenterOfGravityEnabled;
 float4 GravityCenter;
-// float3 GravityCenter;
-// float GravityCenterStrength;
 
 
 // ************************* Output Data *************************
-RWStructuredBuffer<float4> RWGrassForceMap;
+RWStructuredBuffer<FGrassBodyInfo> RWGrassForceMap;
 
 
 float4 GetWindForce(float3 Position)
 {
 	// float2 UV = frac(Position.xy / SamplingScale);
 	// float4 Force = GrassWindStrengthMap.Sample(GrassWindStrengthSampler, UV);
-	const float DirExt = fbm(Position * 0.01f);
-	float2 Direction = float2(cos(DirExt), sin(DirExt));
-	float Intensity = noise(Direction);
-	float4 Force = float4(Direction, 0, Intensity);
+	const float WindAngle = 0 * PI;
+	const float InNoiseScale = 2000;
+	
+	const float2 WindDirection = float2(cos(WindAngle), sin(WindAngle));
+	const float2 WindTangent = float2(WindDirection.y, -WindDirection.x);
+
+	float2 A = dot(Position.xy, WindDirection) * 0.3f * WindDirection + dot(Position.xy, WindTangent) * WindTangent;
+	
+	const float Noise =  (1 + noise(float3((Position.xy + A) / InNoiseScale, Time))) / 2;
+	float Intensity = Noise * 5000.0f;
+	
+	float4 Force = float4(WindDirection, 0, Intensity);
 	return Force;
 }
 
-float4 ComputeCollisionForce(const float3 Position)
+
+
+// [numthreads(MAX_THREADS_PER_GROUP, 1, 1)]
+// void InitForceMapCS(uint3 DispatchThreadID : SV_DispatchThreadID)
+// {
+// 	if (DispatchThreadID.x >= GrassDataSize)
+// 		return;
+//
+// 	RWGrassForceMap[DispatchThreadID.x] = (FDisplacementInfo) 0;
+// }
+//
+// [numthreads(MAX_THREADS_PER_GROUP, 1, 1)]
+// void ComputePhysicsCS(uint3 DispatchThreadID : SV_DispatchThreadID)
+// {
+// 	const uint ThreadIndex = DispatchThreadID.x;
+// 	if (ThreadIndex >= IndirectArgsBuffer[1])
+// 		return;
+//
+// 	
+// 	const FGrassData Data = Unpack(CulledGrassDataBuffer[ThreadIndex]);
+// 	
+// 	const uint Index = Data.Index;
+// 	
+// 	const float3 V0 = Data.Position;
+// 	const float3 Facing = Data.Facing;
+// 	const float3 Up = Data.Up;
+// 	const float Height = Data.Height;
+// 	const float Width = Data.Width;
+// 	const float Stiffness = Data.Stiffness;
+// 	const float SpecWeight = .3f;
+// 	
+// 	// Area of a triangle
+// 	const float Mass = SpecWeight * (Height * Width * .5f);
+// 	
+// 	const float3 PreviousDisplacement = RWGrassForceMap[Index].CurrDisplacement;
+// 	RWGrassForceMap[Index].PrevDisplacement = PreviousDisplacement;
+// 	
+// 	const float3 V2RestPosition = V0 + Up * Height;
+// 	const float3 V2 = V2RestPosition + PreviousDisplacement;
+// 	const float3 V0V2 = V2 - V0;
+// 	
+// 	// 1. Recovery Force
+// 	const float3 Recovery = (V2RestPosition - V2) * 0;
+//
+// 	// 2. Gravity Force
+// 	const float3 GlobalGravity = Mass * normalize(GravityDirection.xyz) * GravityDirection.w * (1 - bIsCenterOfGravityEnabled);
+// 	const float3 FrontGravity = length(GlobalGravity) * .25f * (- Facing);
+// 	const float3 Gravity = GlobalGravity + FrontGravity;
+//
+// 	// 3. Wind Force
+// 	float4 WindForce = GetWindForce(V0);
+// 	
+// 	const float DirectionalAlignment = 1 - abs(dot(WindForce.xyz, V0V2 / length(V0V2)));
+// 	const float HeightRatio = dot(V0V2, Up) / Height;
+// 	const float AlignmentValue = DirectionalAlignment * HeightRatio;
+// 	const float3 Wind = WindForce.xyz * WindForce.w * AlignmentValue;
+//
+// 	// Resultant Force
+// 	const float3 ResultForce = Gravity + Recovery + Wind;
+// 	const float3 Displacement = ResultForce * DeltaTime;
+//
+// 	RWGrassForceMap[Index].CurrDisplacement = Facing * dot(Displacement, Facing);
+// }
+
+
+
+
+
+
+
+
+
+[numthreads(MAX_THREADS_PER_GROUP, 1, 1)]
+void InitForceMapCS(uint3 DispatchThreadID : SV_DispatchThreadID)
 {
-	float3 CollisionForce = 0;
-	for (uint i = 0; i < SpheresNumber; ++i)
-	{
-		FSphere Sphere = SphereBuffer[i];
-		
-		const float3 SpherePosition = Sphere.Center.xyz;
-		const float Radius = Sphere.Radius;
-		
-		const float3 Direction = normalize(Position - SpherePosition);
-		const float Distance = length(Position - SpherePosition);
-		const bool bIsInside = Distance < Radius;
-		
-		CollisionForce += Direction * (Radius - Distance) * bIsInside;
-	}
+	if (DispatchThreadID.x >= GrassDataSize)
+		return;
+
+	const FGrassData Data = Unpack(GrassDataBuffer[DispatchThreadID.x]);
 	
-	float CollisionStrength = length(CollisionForce) + 0.001f; // Avoid division by zero
-	float3 CollisionDirection = CollisionForce / CollisionStrength;
+	FGrassBodyInfo BodyInfo;
+	BodyInfo.Acceleration = 0;
+	BodyInfo.Velocity = 0;
+	BodyInfo.Position = Data.Position + Data.Height * Data.Up;
 	
-	return float4(CollisionDirection, CollisionStrength);
+	const float SpecWeight = .3f;
+	// Area of a triangle
+	BodyInfo.Mass = SpecWeight * (Data.Width * Data.Height / 2);
+
+	RWGrassForceMap[DispatchThreadID.x] = BodyInfo;
 }
 
-[numthreads(1024, 1, 1)]
-void ComputePhysicsCS(uint3 DispatchThreadID : SV_DispatchThreadID)
+float3 ComputeResultForce(in FGrassData Data, in FGrassBodyInfo BodyInfo)
 {
-	if (DispatchThreadID.x >= GrassDataNumber)
-		return;
+	const float3 V0 = Data.Position;
+	const float3 Facing = Data.Facing;
+	const float3 Up = Data.Up;
+	const float Height = Data.Height;
+	const float Width = Data.Width;
+	const float Stiffness = Data.Stiffness;
+	const float SpecWeight = .3f;
+	const float Mass = BodyInfo.Mass;
 	
-	const FGrassData Data = Unpack(GrassDataBuffer[DispatchThreadID.x]);
-	const float SpecWeight = .2f;
-	const float Mass = SpecWeight * Data.Height * Data.Width * .05f; // Area of a triangle
-	
-	const float PreviousCollisionStrength = RWGrassForceMap[Data.Index].w;
-	const float3 PreviousDisplacement = RWGrassForceMap[Data.Index].xyz;
-	
-	const float3 V2RestPosition = Data.Position + Data.Up * Data.Height;
-	const float3 V2PreviousPosition = V2RestPosition + PreviousDisplacement;
-	const float3 V0V2 = V2PreviousPosition - Data.Position;
-	
-	
-	// Collision displacement
-	const float4 CollisionForce = ComputeCollisionForce(V2PreviousPosition);
-	// Fading over time of the collision strength
-	const float CollisionStrength = max(PreviousCollisionStrength - FadingFactor * DeltaTime, 0) + CollisionForce.w;
-	RWGrassForceMap[Data.Index].w = CollisionStrength;
+	const float3 V2RestPosition = V0 + Up * Height;
+	const float3 V2 = BodyInfo.Position;
+	const float3 V0V2 = V2 - V0;
 	
 	// 1. Recovery Force
-	const float3 Recovery = (V2RestPosition - V2PreviousPosition) * Data.Stiffness * max(1 - CollisionStrength, 0.1f);
+	const float3 Recovery = (V2RestPosition - V2) * Stiffness;
 
 	// 2. Gravity Force
-	const float3 GlobalGravity = Mass *
-		(  GravityDirection.xyz * GravityDirection.w * (1 - bIsCenterOfGravityEnabled)
-		 + normalize(GravityCenter.xyz - Data.Position) * GravityCenter.w * bIsCenterOfGravityEnabled);
-	const float3 FrontGravity = length(GlobalGravity) * .25f * Data.Facing;
+	const float3 GlobalGravity = Mass * normalize(GravityDirection.xyz) * GravityDirection.w * (1 - bIsCenterOfGravityEnabled);
+	const float3 FrontGravity = length(GlobalGravity) * .25f * (- Facing);
 	const float3 Gravity = GlobalGravity + FrontGravity;
 
 	// 3. Wind Force
-	float4 WindForce = GetWindForce(Data.Position);
+	float4 WindForce = GetWindForce(V0);
 	
-	const float DirectionalAlignment = 1 - abs(dot(WindForce.xyz, normalize(V0V2)));
-	const float HeightRatio = dot(V0V2, Data.Up) / Data.Height;
+	const float DirectionalAlignment = 1 - abs(dot(WindForce.xyz, V0V2 / length(V0V2)));
+	const float HeightRatio = dot(V0V2, Up) / Height;
 	const float AlignmentValue = DirectionalAlignment * HeightRatio;
 	const float3 Wind = WindForce.xyz * WindForce.w * AlignmentValue;
 
 	// Resultant Force
 	const float3 ResultForce = Gravity + Recovery + Wind;
-	const float3 Displacement = ResultForce * DeltaTime + CollisionForce.xyz * CollisionStrength;
+	return Facing * dot(ResultForce, Facing);
+}
+
+FGrassBodyInfo UpdateBodyInfo(FGrassBodyInfo BodyInfo, in const float3 Force, in const float T)
+{
+	BodyInfo.Acceleration = BodyInfo.Acceleration + Force / BodyInfo.Mass;
+	BodyInfo.Velocity = BodyInfo.Velocity + T * BodyInfo.Acceleration;
+	BodyInfo.Position = BodyInfo.Position + BodyInfo.Velocity * T + BodyInfo.Acceleration * T * T / 2;
+	return  BodyInfo;
+}
 	
-	RWGrassForceMap[Data.Index].xyz = Displacement;
+[numthreads(MAX_THREADS_PER_GROUP, 1, 1)]
+void ComputePhysicsCS(uint3 DispatchThreadID : SV_DispatchThreadID)
+{
+	const uint ThreadIndex = DispatchThreadID.x;
+	if (ThreadIndex >= IndirectArgsBuffer[1])
+		return;
+	
+	const FGrassData Data = Unpack(CulledGrassDataBuffer[ThreadIndex]);
+	const FGrassBodyInfo BodyInfo = RWGrassForceMap[Data.Index];
+	const float3 ResultForce = ComputeResultForce(Data, BodyInfo);
+	RWGrassForceMap[Data.Index] = UpdateBodyInfo(BodyInfo, ResultForce, DeltaTime);
 }

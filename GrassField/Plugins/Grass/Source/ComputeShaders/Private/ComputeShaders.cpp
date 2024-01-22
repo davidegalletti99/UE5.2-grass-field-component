@@ -17,7 +17,7 @@ void FComputeShadersModule::StartupModule()
 	// This code will execute after your module is loaded into memory; the exact timing is specified in the .uplugin file per-module
 
 	// Maps virtual shader source directory to the plugin's actual shaders directory.
-	FString PluginShaderDir = FPaths::Combine(IPluginManager::Get().FindPlugin(TEXT("Grass"))->GetBaseDir(), TEXT("Shaders/Private"));
+	const FString PluginShaderDir = FPaths::Combine(IPluginManager::Get().FindPlugin(TEXT("Grass"))->GetBaseDir(), TEXT("Shaders/Private"));
 	AddShaderSourceDirectoryMapping(TEXT("/Shaders"), PluginShaderDir);
 }
 

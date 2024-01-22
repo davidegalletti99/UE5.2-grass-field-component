@@ -11,13 +11,62 @@
 #include "ShaderParameterStruct.h"
 #include "ShaderCompilerCore.h"
 
-namespace GrassMesh // GrassShaders
+namespace GrassUtils // GrassShaders
 {
-
+	#define MAX_THREADS_PER_GROUP 1024
+	
 	// ************************************************************************************************************** //
 	// ********************************************* Compute Shaders ************************************************ //
 	// ************************************************************************************************************** //
 
+	/** InitInstanceBuffer compute shader. */
+	class COMPUTESHADERS_API FInitInstanceBuffer_CS : public FGlobalShader
+	{
+	public:
+		DECLARE_GLOBAL_SHADER(FInitInstanceBuffer_CS);
+		SHADER_USE_PARAMETER_STRUCT(FInitInstanceBuffer_CS, FGlobalShader);
+
+		BEGIN_SHADER_PARAMETER_STRUCT(FParameters, )
+			SHADER_PARAMETER(uint32, NumIndices)
+			SHADER_PARAMETER_UAV(RWStructuredBuffer<uint>, RWIndirectArgsBuffer)
+		END_SHADER_PARAMETER_STRUCT()
+
+		static bool ShouldCompilePermutation(FGlobalShaderPermutationParameters const& Parameters)
+		{
+			return IsFeatureLevelSupported(Parameters.Platform, ERHIFeatureLevel::SM6);
+		}
+		static void ModifyCompilationEnvironment(
+			const FGlobalShaderPermutationParameters& Parameters,
+			FShaderCompilerEnvironment& OutEnvironment)
+		{
+			OutEnvironment.SetDefine(TEXT("MAX_THREADS_PER_GROUP"), MAX_THREADS_PER_GROUP);
+		}
+	};
+	
+	class COMPUTESHADERS_API FInitForceMap_CS : public FGlobalShader
+	{
+	public:
+		DECLARE_GLOBAL_SHADER(FInitForceMap_CS);
+		SHADER_USE_PARAMETER_STRUCT(FInitForceMap_CS, FGlobalShader);
+
+		BEGIN_SHADER_PARAMETER_STRUCT(FParameters, )
+			SHADER_PARAMETER(uint32, GrassDataSize)
+			SHADER_PARAMETER_SRV(StructuredBuffer<FPackedGrassData>, GrassDataBuffer)
+			SHADER_PARAMETER_UAV(RWStructuredBuffer<FGrassBodyInfo>, RWGrassForceMap)
+		END_SHADER_PARAMETER_STRUCT()
+
+		static bool ShouldCompilePermutation(FGlobalShaderPermutationParameters const& Parameters)
+		{
+			return IsFeatureLevelSupported(Parameters.Platform, ERHIFeatureLevel::SM6);
+		}
+		static void ModifyCompilationEnvironment(
+			const FGlobalShaderPermutationParameters& Parameters,
+			FShaderCompilerEnvironment& OutEnvironment)
+		{
+			OutEnvironment.SetDefine(TEXT("MAX_THREADS_PER_GROUP"), MAX_THREADS_PER_GROUP);
+		}
+	};
+	
 	class COMPUTESHADERS_API FComputePhysics_CS : public FGlobalShader
 	{
 	public:
@@ -26,20 +75,16 @@ namespace GrassMesh // GrassShaders
 
 		BEGIN_SHADER_PARAMETER_STRUCT(FParameters, )
 			// ************************* Input Data **************************
+			SHADER_PARAMETER(float, Time)
 			SHADER_PARAMETER(float, DeltaTime)
 		
-			SHADER_PARAMETER(uint32, GrassDataNumber)
-			SHADER_PARAMETER_RDG_BUFFER_SRV(StructuredBuffer<FPackedGrassData>, GrassDataBuffer)
+			SHADER_PARAMETER_SRV(StructuredBuffer<uint32>, IndirectArgsBuffer)
+			SHADER_PARAMETER_RDG_BUFFER_SRV(StructuredBuffer<FPackedGrassData>, CulledGrassDataBuffer)
 
 			// // Wind Parameters
 			// SHADER_PARAMETER(float, SamplingScale)
 			// SHADER_PARAMETER_RDG_TEXTURE_SRV(Texture2D<float4>, GrassWindStrengthMap)
 			// SHADER_PARAMETER_SAMPLER(SamplerState, GrassWindStrengthSampler);
-
-			// Collision Parameters
-			SHADER_PARAMETER(float, FadingFactor)
-			SHADER_PARAMETER(uint32, SpheresNumber)
-			SHADER_PARAMETER_RDG_BUFFER_SRV(StructuredBuffer<FSphere3f>, SphereBuffer)
 
 			// Gravity Parameters
 			SHADER_PARAMETER(FVector4f, GravityDirection)
@@ -53,30 +98,48 @@ namespace GrassMesh // GrassShaders
 			// SHADER_PARAMETER(float, GravityCenterStrength)
 		
 			// ************************* Output Data *************************
-			SHADER_PARAMETER_RDG_TEXTURE_UAV(RWStructuredBuffer<FVector4f>, RWGrassForceMap)
+			SHADER_PARAMETER_UAV(RWStructuredBuffer<FGrassBodyInfo>, RWGrassForceMap)
 		END_SHADER_PARAMETER_STRUCT()
 
 		static bool ShouldCompilePermutation(FGlobalShaderPermutationParameters const& Parameters)
 		{
 			return IsFeatureLevelSupported(Parameters.Platform, ERHIFeatureLevel::SM6);
 		}
+		static void ModifyCompilationEnvironment(
+			const FGlobalShaderPermutationParameters& Parameters,
+			FShaderCompilerEnvironment& OutEnvironment)
+		{
+			OutEnvironment.SetDefine(TEXT("MAX_THREADS_PER_GROUP"), MAX_THREADS_PER_GROUP);
+		}
 	};
+
 	
-	/** InitInstanceBuffer compute shader. */
-	class COMPUTESHADERS_API FInitInstanceBuffer_CS : public FGlobalShader
+	class COMPUTESHADERS_API FCullInstances_CS : public FGlobalShader
 	{
+
 	public:
-		DECLARE_GLOBAL_SHADER(FInitInstanceBuffer_CS);
-		SHADER_USE_PARAMETER_STRUCT(FInitInstanceBuffer_CS, FGlobalShader);
+		DECLARE_GLOBAL_SHADER(FCullInstances_CS);
+		SHADER_USE_PARAMETER_STRUCT(FCullInstances_CS, FGlobalShader);
 
 		BEGIN_SHADER_PARAMETER_STRUCT(FParameters, )
-			SHADER_PARAMETER(uint32, NumIndices)
-			SHADER_PARAMETER_UAV(RWBuffer<uint>, RWIndirectArgsBuffer)
+			SHADER_PARAMETER(FVector3f, CameraPosition)
+			SHADER_PARAMETER(uint32, GrassDataSize)
+			SHADER_PARAMETER(float, CutoffDistance)
+			SHADER_PARAMETER(FMatrix44f, VP_MATRIX)
+			SHADER_PARAMETER_SRV(StructuredBuffer<FPackedGrassData>, GrassDataBuffer)
+			SHADER_PARAMETER_RDG_BUFFER_UAV(RWStructuredBuffer<FPackedGrassData>, RWCulledGrassDataBuffer)
+			SHADER_PARAMETER_UAV(RWStructuredBuffer<uint32>, RWIndirectArgsBuffer)
 		END_SHADER_PARAMETER_STRUCT()
 
-			static bool ShouldCompilePermutation(FGlobalShaderPermutationParameters const& Parameters)
+		static bool ShouldCompilePermutation(FGlobalShaderPermutationParameters const& Parameters)
 		{
 			return IsFeatureLevelSupported(Parameters.Platform, ERHIFeatureLevel::SM6);
+		}
+		static void ModifyCompilationEnvironment(
+			const FGlobalShaderPermutationParameters& Parameters,
+			FShaderCompilerEnvironment& OutEnvironment)
+		{
+			OutEnvironment.SetDefine(TEXT("MAX_THREADS_PER_GROUP"), MAX_THREADS_PER_GROUP);
 		}
 	};
 
@@ -88,11 +151,8 @@ namespace GrassMesh // GrassShaders
 		SHADER_USE_PARAMETER_STRUCT(FComputeInstanceData_CS, FGlobalShader);
 
 		BEGIN_SHADER_PARAMETER_STRUCT(FParameters, )
-			SHADER_PARAMETER(FVector3f, CameraPosition)
-			SHADER_PARAMETER(uint32, GrassDataSize)
-			SHADER_PARAMETER(float, CutoffDistance)
-			SHADER_PARAMETER(FMatrix44f, VP_MATRIX)
-			SHADER_PARAMETER_SRV(StructuredBuffer<FPackedGrassData>, GrassDataBuffer)
+			SHADER_PARAMETER_SRV(StructuredBuffer<FGrassBodyInfo>, GrassForceMap)
+			SHADER_PARAMETER_RDG_BUFFER_SRV(StructuredBuffer<FPackedGrassData>, CulledGrassDataBuffer)
 			SHADER_PARAMETER_UAV(RWStructuredBuffer<FGrassInstance>, RWInstanceBuffer)
 			SHADER_PARAMETER_UAV(RWStructuredBuffer<uint32>, RWIndirectArgsBuffer)
 		END_SHADER_PARAMETER_STRUCT()
@@ -100,6 +160,13 @@ namespace GrassMesh // GrassShaders
 		static bool ShouldCompilePermutation(FGlobalShaderPermutationParameters const& Parameters)
 		{
 			return IsFeatureLevelSupported(Parameters.Platform, ERHIFeatureLevel::SM6);
+		}
+		
+		static void ModifyCompilationEnvironment(
+			const FGlobalShaderPermutationParameters& Parameters,
+			FShaderCompilerEnvironment& OutEnvironment)
+		{
+			OutEnvironment.SetDefine(TEXT("MAX_THREADS_PER_GROUP"), MAX_THREADS_PER_GROUP);
 		}
 	};
 }

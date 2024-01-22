@@ -5,6 +5,8 @@
 #define USE_INSTANCING 1
 #define NUM_TEX_COORD_INTERPOLATORS 1
 #define NUM_MATERIAL_TEXCOORDS_VERTEX 1
+#define COMPUTESHADER 1
+#define RAYHITGROUPSHADER 1
 
 #include "/Engine/Private/Common.ush"
 #include "/Engine/Private/VertexFactoryCommon.ush"
@@ -17,8 +19,8 @@
 
 #if USE_INSTANCING
 StructuredBuffer<FGrassInstance> InstanceBuffer;
+uint InstanceNumVertices;
 float3 LodViewOrigin;
-uint NumVertices;
 #endif
 
 
@@ -38,17 +40,24 @@ FVertexFactoryIntermediates GetVertexFactoryIntermediates(FVertexFactoryInput In
     FVertexFactoryIntermediates Intermediates = (FVertexFactoryIntermediates)0;
     Intermediates.SceneData = VF_GPUSCENE_GET_INTERMEDIATES(Input);
     
+    FPrimitiveSceneData PrimitiveData = GetPrimitiveData(Intermediates);
 #if USE_INSTANCING
     const FGrassInstance InstanceData = InstanceBuffer[Input.InstanceId];
-    // CalculateVertex(Input, NumVertices, InstanceData);
     
-    Intermediates.InstanceTransform1 = InstanceData.Transform[0];
-    Intermediates.InstanceTransform2 = InstanceData.Transform[1];
-    Intermediates.InstanceTransform3 = InstanceData.Transform[2];
-    Intermediates.InstanceOrigin = InstanceData.Transform[3];
+    Intermediates.VertexPosition = // Input.Position;
+        GetVertexPosition(InstanceData, Input.VertexId, InstanceNumVertices);
+    Intermediates.PrevVertexPosition = // Input.Position;
+        GetPrevVertexPosition(InstanceData, Input.VertexId, InstanceNumVertices);
+    
+    Intermediates.InstanceTransform1 = float4(InstanceData.RotScaleMatrix[0], 0);
+    Intermediates.InstanceTransform2 = float4(InstanceData.RotScaleMatrix[1], 0);
+    Intermediates.InstanceTransform3 = float4(InstanceData.RotScaleMatrix[2], 0);
+    Intermediates.InstanceOrigin     = float4(InstanceData.V0, 1.0);
+
+     
 #endif // USE_INSTANCING
     
-    float TangentSign = 1.0;
+    float TangentSign = 1.0f;//UnpackNormal(Input.TangentZ).w;
     Intermediates.TangentToLocal = CalcTangentToLocal(Input, TangentSign);
     Intermediates.TangentToWorld = CalcTangentToWorld(Intermediates, Intermediates.TangentToLocal);
     Intermediates.TangentToWorldSign = TangentSign * GetInstanceData(Intermediates).DeterminantSign;
@@ -79,11 +88,9 @@ FMaterialVertexParameters GetMaterialVertexParameters(
     
 	float4x4 InstanceToLocal = GetInstanceTransform(Intermediates);
 	Result.InstanceLocalToWorld = LWCMultiply(InstanceToLocal, PrimitiveData.LocalToWorld);
-	Result.InstanceLocalPosition = Input.Position.xyz;
+	Result.InstanceLocalPosition = Intermediates.VertexPosition;
 	Result.InstanceId = GetInstanceId(Input.InstanceId);
-    
 	Result.PrevFrameLocalToWorld = LWCMultiply(GetInstancePrevTransform(Intermediates), PrimitiveData.PreviousLocalToWorld);
-
 	// Calculate derived world to local
 	{
 		float3 Scale2;
@@ -104,7 +111,7 @@ FMaterialVertexParameters GetMaterialVertexParameters(
 		Result.InstanceWorldToLocal = LWCMultiply(PrimitiveData.WorldToLocal, LocalToInstance);
 	}
 #else
-    Result.PrevFrameLocalToWorld = GetInstanceData(Intermediates).PrevLocalToWorld;
+    Result.PrevFrameLocalToWorld = GetInstancePrevTransform(Intermadiates);//GetInstanceData(Intermediates).PrevLocalToWorld;
 #endif // USE_INSTANCING
     
 #if NUM_MATERIAL_TEXCOORDS_VERTEX
@@ -131,15 +138,20 @@ FVertexFactoryInterpolantsVSToPS VertexFactoryGetInterpolantsVSToPS(FVertexFacto
     GetCustomInterpolators(VertexParameters, CustomizedUVs);
 
     UNROLL
-
     for (int CoordinateIndex = 0; CoordinateIndex < NUM_TEX_COORD_INTERPOLATORS; CoordinateIndex++)
-    {
+    {   
         SetUV(Interpolants, CoordinateIndex, CustomizedUVs[CoordinateIndex]);
     }
 #endif
     
     SetTangents(Interpolants, Intermediates.TangentToWorld[0], Intermediates.TangentToWorld[2], Intermediates.TangentToWorldSign);
     SetPrimitiveId(Interpolants, Intermediates.SceneData.PrimitiveId);
+
+    
+#if USES_PER_INSTANCE_CUSTOM_DATA && VF_USE_PRIMITIVE_SCENE_DATA
+    Interpolants.CustomDataOffset = Intermediates.SceneData.InstanceData.CustomDataOffset;
+    Interpolants.CustomDataCount  = Intermediates.SceneData.InstanceData.CustomDataCount;
+#endif
     
     return Interpolants;
 }
@@ -177,8 +189,7 @@ FMaterialPixelParameters GetMaterialPixelParameters(FVertexFactoryInterpolantsVS
     Result.PrimitiveId = GetPrimitiveId(Interpolants);
     
     Result.TangentToWorld = AssembleTangentToWorld( TangentToWorld0, TangentToWorld2 );
-    Result.SvPosition = SvPosition;
-
+    
     return Result;
 }
 
@@ -204,9 +215,10 @@ half3x3 VertexFactoryGetTangentToLocal(FVertexFactoryInput Input, FVertexFactory
 float4 VertexFactoryGetWorldPosition(FVertexFactoryInput Input, FVertexFactoryIntermediates Intermediates)
 {
     FLWCMatrix LocalToWorld = GetInstanceData(Intermediates).LocalToWorld;
-
+    
 #if USE_INSTANCING
-    return CalcWorldPosition(float4(Input.Position, 1.0), GetInstanceTransform(Intermediates), LocalToWorld);
+    
+    return CalcWorldPosition(float4(Intermediates.VertexPosition, 1.0), GetInstanceTransform(Intermediates), LocalToWorld);
 #else
     return CalcWorldPosition(float4(Input.Position, 1.0), LocalToWorld);
 #endif	// USE_INSTANCING
@@ -237,8 +249,8 @@ float4 VertexFactoryGetPreviousWorldPosition(FVertexFactoryInput Input, FVertexF
     float4 PrevLocalPosition = float4(Input.Position, 1.0f);
 #if USE_INSTANCING
     {
-		float4x4 InstanceTransform = GetInstancePrevTransform(Intermediates);
-		PrevLocalPosition = mul(float4(Input.Position, 1.0f), InstanceTransform);
+		const float4x4 InstanceTransform = GetInstancePrevTransform(Intermediates);
+		PrevLocalPosition = mul(float4(Intermediates.PrevVertexPosition, 1.0f), InstanceTransform);
     }
 #endif
     return TransformPreviousLocalPositionToTranslatedWorld(PrevLocalPosition.xyz, PreviousLocalToWorld);

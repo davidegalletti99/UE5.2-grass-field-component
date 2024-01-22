@@ -32,18 +32,24 @@ class FGrassInstancingSceneProxy;
 class FGrassInstancingSectionProxy;
 class FGrassInstancingRendererExtension;
 
-namespace GrassInstancingMesh
+namespace GrassUtils
 {
-	/* Keep indirect args offsets in sync with ISM.usf. */
-	static constexpr int32 IndirectArgsByteOffset_FinalCull = 0;
-	static constexpr int32 IndirectArgsByteSize = 4 * sizeof(uint32);
+	static constexpr int32 IndirectArgsPerElementSize = sizeof(uint32);
+	static constexpr int32 IndirectArgsBytesSize = 5 * IndirectArgsPerElementSize;
 
 	/** Buffers filled by GPU culling. */
 	struct COMPUTESHADERS_API FPersistentBuffers
 	{
 		FGrassInstancingSectionProxy* SectionProxy = nullptr;
+
+		/* GrassData buffer. */
 		FBufferRHIRef GrassDataBuffer;
 		FShaderResourceViewRHIRef GrassDataBufferSRV;
+
+		/* ForceMap buffer. */
+		FBufferRHIRef GrassForceMap;
+		FUnorderedAccessViewRHIRef GrassForceMapUAV;
+		FShaderResourceViewRHIRef GrassForceMapSRV;
 
 		/* Culled instance buffer. */
 		FBufferRHIRef InstanceBuffer;
@@ -53,6 +59,7 @@ namespace GrassInstancingMesh
 		/* IndirectArgs buffer for final DrawInstancedIndirect. */
 		FBufferRHIRef IndirectArgsBuffer;
 		FUnorderedAccessViewRHIRef IndirectArgsBufferUAV;
+		FShaderResourceViewRHIRef IndirectArgsBufferSRV;
 	};
 
 	/** View matrices that can be frozen in FreezeRendering mode. */
@@ -70,7 +77,7 @@ namespace GrassInstancingMesh
 	struct COMPUTESHADERS_API FProxyDesc
 	{
 		bool IsValid = false;
-		TResourceArray<GrassMesh::FPackedGrassData>* GrassData;
+		TResourceArray<GrassUtils::FPackedGrassData>* GrassData;
 		float CutoffDistance;
 		int NumIndices;
 	};
@@ -101,9 +108,9 @@ namespace GrassInstancingMesh
 	/** Structure to carry RDG resources. */
 	struct COMPUTESHADERS_API FVolatileResources
 	{
-		FRDGBufferRef Counter;
-		FRDGBufferUAVRef CounterUAV;
-		FRDGBufferSRVRef CounterSRV;
+		FRDGBufferRef CulledGrassDataBuffer;
+		FRDGBufferUAVRef CulledGrassDataBufferUAV;
+		FRDGBufferSRVRef CulledGrassDataBufferSRV;
 	};
 }
 
@@ -126,10 +133,10 @@ public:
 		return reinterpret_cast<size_t>(&UniquePointer);
 	}
 
-	TResourceArray<GrassMesh::FPackedGrassData> GrassData;
-	FBox Bounds;
-	uint32 NumIndices;
-	float CutoffDistance;
+	TResourceArray<GrassUtils::FPackedGrassData> GrassData;
+	FBox Bounds = FBox(ForceInitToZero);
+	uint32 NumIndices = 0;
+	float CutoffDistance = 0.0f;
 	
 	FGrassInstancingVertexFactory VertexFactory;
 };
@@ -203,12 +210,12 @@ protected:
 	virtual void GetDynamicMeshElements(const TArray<const FSceneView *> &Views, const FSceneViewFamily &ViewFamily, uint32 VisibilityMap, FMeshElementCollector &Collector) const override;
 	//~ End FPrimitiveSceneProxy Interface
 
-	void AddMesh(
-	FMeshElementCollector& Collector,
-	const FSceneViewFamily& ViewFamily,
-	int32 ViewIndex,
-	const FGrassMeshLodData* Lod,
-	FGrassInstancingSectionProxy* Section) const;
+	void CreateBaseMeshBatch(
+        FMeshElementCollector& Collector,
+        const FSceneViewFamily& ViewFamily,
+        int32 ViewIndex,
+        const FGrassMeshLodData* Lod,
+        FGrassInstancingSectionProxy* Section) const;
 	
 private:
 	void BuildOcclusionVolumes(TArrayView<FVector2D> const &InMinMaxData, FIntPoint const &InMinMaxSize, TArrayView<int32> const &InMinMaxMips, int32 InNumLods);
@@ -220,12 +227,10 @@ public:
 	class FMaterialRenderProxy *Material;
 	FMaterialRelevance MaterialRelevance;
 
+	float CutoffDistance;
 	FUintVector2 MinMaxLodSteps;
 
-	
 	TMap<uint8, FGrassMeshLodData*> Lods;
-
-	float CutoffDistance;
 	TArray<FGrassInstancingSectionProxy*> Sections;
 };
 
@@ -253,7 +258,7 @@ public:
 	 *  This allocates the buffers to use for the frame and adds
 	 *  the work to fill the buffers to the queue.
 	 */
-	GrassInstancingMesh::FPersistentBuffers& AddWork(
+	GrassUtils::FPersistentBuffers& AddWork(
 		FGrassInstancingSectionProxy* InSection,
 		const FSceneView* InMainView,
 		const FSceneView* InCullView);
@@ -278,7 +283,7 @@ private:
 	bool bInFrame;
 
 	/** Buffers to fill. Resources can persist between frames to reduce allocation cost, but contents don't persist. */
-	TArray<GrassInstancingMesh::FPersistentBuffers> Buffers;
+	TArray<GrassUtils::FPersistentBuffers> Buffers;
 	/** Per buffer frame time stamp of last usage. */
 	TArray<uint32> DiscardIds;
 	/** Current frame time stamp. */
@@ -308,7 +313,10 @@ private:
 	{
 		static uint32 SortKey(const FWorkDesc& WorkDesc)
 		{
-			return (WorkDesc.ProxyIndex << 24) | (WorkDesc.MainViewIndex << 16) | (WorkDesc.CullViewIndex << 8) | WorkDesc.BufferIndex;
+			return (WorkDesc.ProxyIndex    << 24)
+				|  (WorkDesc.MainViewIndex << 16)
+				|  (WorkDesc.CullViewIndex << 8)
+				|  (WorkDesc.BufferIndex);
 		}
 
 		bool operator()(const FWorkDesc& A, const FWorkDesc& B) const

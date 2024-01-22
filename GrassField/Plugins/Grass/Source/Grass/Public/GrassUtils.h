@@ -3,7 +3,7 @@
 
 namespace GrassUtils
 {
-	static GrassMesh::FPackedGrassData ComputeData(const FVector& Position, const FVector& Up, const float MinHeight, const float MaxHeight, const float MinWidth, const float MaxWidth)
+	static GrassUtils::FPackedGrassData ComputeData(const FVector& Position, const FVector& Up, const float MinHeight, const float MaxHeight, const float MinWidth, const float MaxWidth)
 	{
 		FVector V = FMath::VRand();
 		while (V.Dot(Up) >= .95f)
@@ -15,7 +15,7 @@ namespace GrassUtils
 		const float Height = Extraction * (MaxHeight - MinHeight) + MinHeight;
 		const float Width = Extraction * (MaxWidth - MinWidth) + MinWidth;
 		const float Stiffness = FMath::SRand();
-		return GrassMesh::FPackedGrassData
+		return GrassUtils::FPackedGrassData
 		{
 			0,
 			static_cast<FVector3f>(Position),

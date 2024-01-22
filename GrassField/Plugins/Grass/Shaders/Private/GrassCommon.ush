@@ -1,4 +1,5 @@
 #pragma once
+
 #define GRAVITATIONAL_ACCELERATION 9.81
 #define PI 3.14159265359
 #define SQ_2_PI 2.50662827463
@@ -13,7 +14,7 @@
 	(p0 * (1 - t) * (1 - t) * (1 - t) + 3 * p1 * t * (1 - t) * (1 - t) + 3 * p2 * t * t * (1 - t) + p3 * t * t * t)
 
 #define GAUSSIAN_MAP(m, s, x) \
-	(exp(-(x - m)*(x - m) / (2 * s * s)) / (s * SQ_2_PI))
+	(exp(-(x - m) * (x - m) / (2 * s * s)) / (s * SQ_2_PI))
 
 # define DERIVATIVE_QUAD_BEZ(p0, p1, p2, t) \
 	(2 * ((1 - t) * (p1 - p0) + t * (p2 - p1)))
@@ -44,6 +45,11 @@
         float3(1, 0, 0), \
         float3(0, 1, 0), \
         float3(0, 0, 1))
+
+#define IDENTITY_MATRIX_3X3(Type, RowType) Type( \
+		RowType(1, 0, 0), \
+		RowType(0, 1, 0), \
+		RowType(0, 0, 1))
 
 #define IDENTITY_MATRIX_4X4 float4x4( \
         float4(1, 0, 0, 0), \
@@ -81,10 +87,19 @@
         float4(     0,      0, vec.z, 0), \
         float4(     0,      0,     0, 1))
 
-struct FSphere
+
+struct FDisplacementInfo
 {
-	float3 Center;
-	float Radius;
+	float3 PrevDisplacement;
+	float3 CurrDisplacement;
+};
+
+struct FGrassBodyInfo
+{
+	float Mass;
+	float3 Velocity;
+	float3 Acceleration;
+	float3 Position;
 };
 
 /** 
@@ -135,11 +150,14 @@ struct FPackedGrassVertex
 
 struct FGrassInstance
 {
-    float4x4 Transform;
-	//float4x4 InverseTransform;
+	float3x3 RotScaleMatrix;
 	
+	float3 V0;
 	float3 V1;
 	float3 V2;
+	
+	float3 PrevV1;
+	float3 PrevV2;
 };
 
 struct FPackedGrassInstance

@@ -1,11 +1,10 @@
+#pragma once
 #include "/Engine/Public/Platform.ush"
 #include "Noise.ush"
 
 
-float GlobalWorldTime;
-int Width;
-int Height;
-float MaxAltitude;
+float Time;
+uint3 Size;
 float Spacing;
 float2 Scale;
 
@@ -18,28 +17,26 @@ static groupshared float2 Seed;
 static groupshared float3x3 WorldToNoise;
 static groupshared float4x4 NoiseToWorld;
 
-void SetTransforms(const float2 InScale, const float InAmplitude, const float InSpacing, const int InWidth, const int InHeight)
+void SetTransforms(const float2 InScale, const uint3 InSize, const float InSpacing)
 {
 	WorldToNoise = float3x3(
-		float3(InScale.x / InWidth, 0, 0),
-		float3(0, InScale.y / InHeight, 0),
-		float3(- InScale.x / 2, - InScale.y / 2, 1)
-	);
+		float3(InScale.x / InSize.x,                    0, 0),
+		float3(                   0, InScale.y / InSize.y, 0),
+		float3(     - InScale.x / 2,      - InScale.y / 2, 1));
 	WorldToNoise = transpose(WorldToNoise);
 	
 	NoiseToWorld = float4x4(
-		float4(InWidth * InSpacing / InScale.x, 0, 0, 0),
-		float4(0, InHeight * InSpacing / InScale.y, 0, 0),
-		float4(0, 0, InAmplitude, 0),
-		float4(0, 0, 0, 1)
-	);
+		float4(InSize.x * InSpacing / InScale.x,                                0,                    0, 0),
+		float4(                               0, InSize.y * InSpacing / InScale.y,                    0, 0),
+		float4(                               0,                                0, InSize.z * InSpacing, 0),
+		float4(0,                             0,                                0,                       1));
 	NoiseToWorld = transpose(NoiseToWorld);
 }
 
-void SetSeed(const float Time)
+void SetSeed(const float Time, const float2 Scale)
 {
 	
-	Seed = rand2(mul(WorldToNoise, float3(Time, Time, 1)).xy);
+	Seed = rand2( float2(cos(Time / Scale.x), sin(Time / Scale.y)));
 }
 
 float H(float2 P)
@@ -86,45 +83,44 @@ float3x3 ComputeTangentSpace(const uint2 Position)
 	return float3x3(Tangent, Bitangent, Normal);
 }
 
-
 [numthreads(THREADS_X, THREADS_Y, THREADS_Z)]
 void Main(
 	const uint3 DispatchThreadId : SV_DispatchThreadID,
 	const uint Id : SV_GroupIndex)
 {
-	if (DispatchThreadId.x >= Width || DispatchThreadId.y >= Height)
+	if (DispatchThreadId.x >= Size.x || DispatchThreadId.y >= Size.y)
 		return;
 
 	if (Id == 0)
 	{
-		SetTransforms(Scale, MaxAltitude, Spacing, Width, Height);
-		SetSeed(GlobalWorldTime);
+		SetTransforms(Scale, Size, Spacing);
+		SetSeed(Time, Scale);
 	}
 	GroupMemoryBarrierWithGroupSync();
 	
-    const int Idx = DispatchThreadId.y * Width + DispatchThreadId.x;
+    const int Idx = DispatchThreadId.y * Size.x + DispatchThreadId.x;
 	
 	const float3x3 TangentSpace = ComputeTangentSpace(DispatchThreadId.xy);
 	Points[Idx] = ComputePosition(DispatchThreadId.xy);
 	Normals[Idx] = TangentSpace[2];
 	Tangents[Idx] = TangentSpace[0];
 	
-    if (DispatchThreadId.x >= Width - 1 || DispatchThreadId.y >= Height - 1)
+    if (DispatchThreadId.x >= Size.x - 1 || DispatchThreadId.y >= Size.y - 1)
     	return;
 	
     const int TriangleIdx = (Idx - (int) DispatchThreadId.y) * 3 * 2;
-	//	p1       p2
-	//	 *-------*
-	//	 |     / |
-	//	 |   /   |
-	//	 | /     |
-	//	 *-------*
 	//	p3       p4
+	//	 *-------*
+	//	 | \     |
+	//	 |   \   |
+	//	 |     \ |
+	//	 *-------*
+	//	p1       p2
     Triangles[TriangleIdx + 0] = Idx;                   // p1
-    Triangles[TriangleIdx + 1] = Idx + Width;           // p3
+    Triangles[TriangleIdx + 1] = Idx + Size.x;           // p3
     Triangles[TriangleIdx + 2] = Idx + 1;               // p2
 
     Triangles[TriangleIdx + 3] = Idx + 1;               // p2
-    Triangles[TriangleIdx + 4] = Idx + Width;           // p3
-    Triangles[TriangleIdx + 5] = Idx + Width + 1;       // p4
+    Triangles[TriangleIdx + 4] = Idx + Size.x;           // p3
+    Triangles[TriangleIdx + 5] = Idx + Size.x + 1;       // p4
 }

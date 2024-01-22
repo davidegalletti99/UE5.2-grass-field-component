@@ -10,10 +10,10 @@
 UGrassMeshSection::UGrassMeshSection(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
 {
-	GrassData = TResourceArray<GrassMesh::FPackedGrassData>();
+	GrassData = TResourceArray<GrassUtils::FPackedGrassData>();
 }
 
-bool UGrassMeshSection::AddGrassData(GrassMesh::FPackedGrassData& Data)
+bool UGrassMeshSection::AddGrassData(GrassUtils::FPackedGrassData& Data)
 {
 	const bool Result = FMath::PointBoxIntersection(FVector(Data.Position), Bounds);
 
@@ -114,7 +114,6 @@ void UGrassFieldComponent::EmptyGrassData()
 
 void UGrassFieldComponent::UpdateRenderThread()
 {
-	
 	MarkRenderStateDirty();
 }
 
@@ -197,11 +196,11 @@ void UGrassFieldComponent::SampleGrassData()
 			GetWorld()->LineTraceSingleByProfile(Hit, Start, End, SurfaceMesh->GetCollisionProfileName(), Params)
 			&& Hit.GetActor() == Terrain)
 		{
-			FVector Up = Hit.ImpactNormal + FVector(0, 0, 2);
+			FVector Up = Hit.ImpactNormal + FVector(0, 0, 1) * 2.5f;
 			Up.Normalize();
 			FVector Position = Hit.ImpactPoint;
 			
-			GrassMesh::FPackedGrassData Data = GrassUtils::ComputeData(Position, Up, MinHeight, MaxHeight, MinWidth, MaxWidth);
+			GrassUtils::FPackedGrassData Data = GrassUtils::ComputeData(Position, Up, MinHeight, MaxHeight, MinWidth, MaxWidth);
 			for (const auto& Section : Sections)
 			{
 				if (Section->AddGrassData(Data))

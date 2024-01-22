@@ -2,7 +2,7 @@
 
 #include "Dataflow/DataflowConnection.h"
 
-namespace GrassMesh
+namespace GrassUtils
 {
 
 	// FGrassData
@@ -17,8 +17,8 @@ namespace GrassMesh
 
 	FGrassData::FGrassData(FPackedGrassData& InData)
 	{
-		this->Height = convert<float>((InData.HeightAndWidth & 0xffff0000) >> 1);
-		this->Width = convert<float>((InData.HeightAndWidth & 0x0000ffff) << 15);
+		this->Height = Convert<float>((InData.HeightAndWidth & 0xffff0000) >> 1);
+		this->Width = Convert<float>((InData.HeightAndWidth & 0x0000ffff) << 15);
 		
 		this->Facing = FVector3f(UnpackNormal(InData.Facing));
 		this->Up = FVector3f(UnpackNormal(InData.Up));
@@ -38,8 +38,8 @@ namespace GrassMesh
 		// prendo i 4 bit medno significativi dall'esponente e 12 dalla mantissa
 		// 7    f    f    f    8    0    0    0
 		// 0111 1111 1111 1111 1000 0000 0000 0000
-		this->HeightAndWidth = (convert<uint32>(Height) & 0x7fff8000) << 1;
-		this->HeightAndWidth |= (convert<uint32>(Width) & 0x7fff8000) >> 15;
+		this->HeightAndWidth = (Convert<uint32>(Height) & 0x7fff8000) << 1;
+		this->HeightAndWidth |= (Convert<uint32>(Width) & 0x7fff8000) >> 15;
 
 		this->Facing = PackNormal(Facing);
 		this->Up = PackNormal(Up);

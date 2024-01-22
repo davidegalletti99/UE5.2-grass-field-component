@@ -2,20 +2,29 @@
 
 #pragma once
 
+#include "HLSLTypeAliases.h"
 #include "VectorTypes.h"
 
 #ifndef My_USE_INSTANCING
 	#define My_USE_INSTANCING 0
 #endif // USE_INSTANCING
 
-namespace GrassMesh {
+namespace GrassUtils
+{
+	#define GRAVITATIONAL_ACCELERATION 9.81f
+	#define QUAD_BEZ(P0, P1, P2, T) \
+		( P0 * (1 - T) * (1 - T) + P1 * 2 * (1 - T) * T + P2 * T * T )
+	#define CUB_BEZ(P0, P1, P2, P3, T) \
+		( P0 * (1 - T) * (1 - T) * (1 - T) + P1 * 3 * (1 - T) * (1 - T) * T + P2 * 3 * (1 - T) * T * T + P3 * T * T * T )
 	struct FGrassData;
 	struct FPackedGrassData;
 	struct FLodGrassData;
 	struct FPackedLodGrassData;
 
+
+
 	template <typename OutType, typename InType>
-	inline OutType convert(InType Value)
+	OutType Convert(InType Value)
 	{
 		union FConverter
 		{
@@ -27,6 +36,20 @@ namespace GrassMesh {
 
 		return Conv.Out;
 	}
+
+	struct FDisplacementInfo
+	{
+		FVector3f PrevDisplacement;
+		FVector3f CurrDisplacement;
+	};
+
+	struct FGrassBodyInfo
+	{
+		FVector3f Velocity;
+		FVector3f Acceleration;
+		FVector3f Position;
+		float Mass;
+	};
 	
 	struct COMPUTESHADERS_API FGrassData
 	{
@@ -70,9 +93,14 @@ namespace GrassMesh {
 
 	struct COMPUTESHADERS_API FGrassInstance
 	{
-		float Transform[4][4];
+		float RotScaleMatrix[3][3];
+		
+		FVector3f V0;
 		FVector3f V1;
 		FVector3f V2;
+		
+		FVector3f PrevV1;
+		FVector3f PrevV2;
 	};
 
 	struct COMPUTESHADERS_API FPackedGrassInstance
@@ -152,13 +180,7 @@ namespace GrassMesh {
 		Out /= MaxUint16;
 		return Out;
 	}
-
-#define GRAVITATIONAL_ACCELERATION 9.81f
-#define QUAD_BEZ(P0, P1, P2, T) \
-	( P0 * (1 - T) * (1 - T) + P1 * 2 * (1 - T) * T + P2 * T * T)
-#define CUB_BEZ(P0, P1, P2, P3, T) \
-	( P0 * (1 - T) * (1 - T) * (1 - T) + P1 * 3 * (1 - T) * (1 - T) * T + P2 * 3 * (1 - T) * T * T + P3 * T * T * T )
-
+	
 	// TODO: Move this to a more appropriate place
 	// TODO: Add a proper lod index computation
 	inline float ComputeLodIndex(
@@ -172,20 +194,12 @@ namespace GrassMesh {
 		
 		const float LodPercentage = 1 - Distance / CutoffDistance;
 		const FVector2f MinMaxLodF = FVector2f(MinMaxLod.X, MinMaxLod.Y);
-
-		const float Delta = MinMaxLodF.Y - MinMaxLodF.X;
+		
 		const uint32 Lod = FMath::Clamp(
-			QUAD_BEZ(MinMaxLodF.X, MinMaxLodF.X, MinMaxLodF.Y, LodPercentage),
+			CUB_BEZ(MinMaxLodF.X, MinMaxLodF.X, MinMaxLodF.X, MinMaxLodF.Y, LodPercentage),
 			MinMaxLod.X, MinMaxLod.Y);
+		
 		return Lod;
-	}
-	
-	
-	inline FVector3f MovePoint(const FVector3f Pi, const FVector3f Vi, const float T)
-	{
-		FVector3f P = Pi + Vi * T;
-		P.Z -= T * T * GRAVITATIONAL_ACCELERATION / 2;
-		return P;
 	}
 
 	inline void CreateGrassModels(
@@ -193,14 +207,11 @@ namespace GrassMesh {
 	    TResourceArray<uint32>& IndexBuffer,
 	    uint32 LodStep)
 	{
-	    const float MaxHeight = 1.0f;
-	    const float MaxWidth = 1.0f;
-	    
-		const FVector3f V0 = FVector3f(0, 0, FMath::Sqrt(2 * GRAVITATIONAL_ACCELERATION * MaxHeight));
-		const float Te = V0.Z / GRAVITATIONAL_ACCELERATION;
+	    constexpr float MaxHeight = 1.0f;
+	    constexpr float MaxWidth = 1.0f;
 		
 		const FVector3f InitialPosition = FVector3f(0, 0, 0);
-	    const FVector3f FinalPosition = MovePoint(InitialPosition, V0, V0.Z / GRAVITATIONAL_ACCELERATION);
+	    const FVector3f FinalPosition = FVector3f(0, 0, 1) * MaxHeight;
 		
 	    constexpr float Angle = UE_PI * 0.1;
 	    const FVector3f Normal = FVector3f(0, 1, 0);
@@ -218,10 +229,10 @@ namespace GrassMesh {
 	    uint32 VertexIndex = 0, PrimitiveIndex = 0;
 	    for (uint32 i = 0; i <= LodStep; i++, VertexIndex += 2, PrimitiveIndex += 6)
 	    {
-
+	    
 	        const float Percentage = static_cast<float>(i) / (LodStep + 1);
 	        const float CurrentFactor = QUAD_BEZ(1, 1 * 0.85, 0, Percentage);
-	        const FVector3f CurrentPosition = MovePoint(InitialPosition, V0, Percentage * Te);
+	        const FVector3f CurrentPosition = QUAD_BEZ(InitialPosition, InitialPosition, FinalPosition, Percentage);
 	        
 	        const float CurrentHalfWidth = CurrentFactor * MaxWidth / 2;
 	        
@@ -231,13 +242,13 @@ namespace GrassMesh {
 	        P1.TangentX = PackNormal(Tangent1);
 	        P1.TangentZ = PackNormal(FVector4f(Normal1, 1));
 	    	VertexBuffer[VertexIndex + 0] = P1;
-
+	    
 	        P2.Position = CurrentPosition + Tangent * CurrentHalfWidth;
 	        P2.UV = PackUV(FVector2f(0.5 + CurrentFactor, Percentage));
 	        P2.TangentX = PackNormal(Tangent2);
 	        P2.TangentZ = PackNormal(FVector4f(Normal2, 1));
 	        VertexBuffer[VertexIndex + 1] = P2;
-
+	    
 	        
 	        if (i < LodStep)
 	        {

@@ -39,6 +39,9 @@ struct FVertexFactoryIntermediates
 	float4 InstanceTransform1;
 	float4 InstanceTransform2;
 	float4 InstanceTransform3;
+
+	float3 VertexPosition;
+	float3 PrevVertexPosition;
 #endif // USE_INSTANCING
 };
 
@@ -164,6 +167,7 @@ half3x3 GetInstanceToLocal3x3(FVertexFactoryIntermediates Intermediates)
     return half3x3( Intermediates.InstanceTransform1.xyz,
                     Intermediates.InstanceTransform2.xyz,
                     Intermediates.InstanceTransform3.xyz);
+	// return IDENTITY_MATRIX_3X3(half3x3, half3);
 }
 
 float4x4 GetInstanceTransform(FVertexFactoryIntermediates Intermediates)
@@ -173,18 +177,18 @@ float4x4 GetInstanceTransform(FVertexFactoryIntermediates Intermediates)
         float4(Intermediates.InstanceTransform2.xyz, 0.0f),
         float4(Intermediates.InstanceTransform3.xyz, 0.0f),
         float4(Intermediates.InstanceOrigin.xyz, 1.0f));
+
 }
 
 float4x4 GetInstancePrevTransform(FVertexFactoryIntermediates Intermediates)
 {
-    // Assumes instance transform never change, which means per-instance motion will cause TAA and motion blur artifacts.
+    // // Assumes instance transform never change, which means per-instance motion will cause TAA and motion blur artifacts.
     return GetInstanceTransform(Intermediates);
 }
 
 float3 GetInstanceOrigin(FVertexFactoryIntermediates Intermediates)
 {
-    const float3 Offset = mul(float3(0, 0, 0), GetInstanceToLocal3x3(Intermediates));
-    return Intermediates.InstanceOrigin.xyz + Offset;
+    return Intermediates.InstanceOrigin.xyz;
 }
 #endif	// USE_INSTANCING
 
@@ -224,41 +228,48 @@ float2 GetUV(FVertexFactoryInterpolantsVSToPS Interpolants, uint UVIndex)
     return UVIndex % 2 ? UVVector.zw : UVVector.xy;
 }
 #endif
-void CalculateVertex(inout FVertexFactoryInput Vertex, uint NumVertices, FGrassInstance Data)
+
+float3 GetPosition(const float3 V0, const float3 V1, const float3 V2, const float3x3 RotScaleMatrix, const uint VertexId, const uint NumVertices)
 {
-	
 	// MaxSteps = 1 + LODIndex
 	const int MaxSteps = (NumVertices - 1) / 2;
-	const int CurrentStep = Vertex.VertexId / 2;
-	const int InStepVertexId = Vertex.VertexId % 2;
+	const int CurrentStep = VertexId / 2;
+	const int InStepVertexId = VertexId % 2;
 	const float Percentage = float(CurrentStep) / MaxSteps;
-
-	//           0
-	//           *
-	//         /   \
-	//       /       \
-	//     /           \
-	// -1 *-------------* 1
-    
+	
 	// -1 if the vertex is on the left side
 	//  1 if it's on the right side
-	//  0 if it's the vertex at the center
-	const int VertexSide = (1 - 2 * InStepVertexId) * ceil(1 - Percentage);
+	const int VertexSide = 2 * InStepVertexId - 1;
+	//
+	// const float3 V0V2Dir = normalize(V2 - V0);
+	// const float3 V0V1Dir = normalize(V1 - V0);
+	// const bool bIsCollinear = abs(dot(V0V1Dir, V0V2Dir)) > 0.9;
 
+	// const float3 V0Tangent = float3(1, 0, 0);
+	// const float3 V2Tangent = normalize(cross(V0V1Dir, V0V2Dir) * (1 - bIsCollinear) + V0Tangent * bIsCollinear);
+	// const float3 Tangent = normalize(QUAD_BEZ(V0Tangent, V0Tangent, V2Tangent, Percentage));
 	
-	const float3 V0 = Data.Transform[3].xyz;
+	// const float Width = (length(RotScaleMatrix[0]) / length(mul(RotScaleMatrix, Tangent))) * QUAD_BEZ(1.0f, 0.85f, 0.0f, Percentage) / 2.0f;
+
+	const float Width =  QUAD_BEZ(1.0f, 0.85f, 0.0f, Percentage) / 2.0f;
+	const float3 Tangent = float3(1, 0, 0);
+	const float3 VertexPosition = QUAD_BEZ(V0, V1, V2, Percentage) + Tangent * Width * VertexSide;
+	return VertexPosition;
+}
+
+float3 GetVertexPosition(const FGrassInstance Data, const uint VertexId, const uint NumVertices)
+{
+	const float3 V0 = 0;
 	const float3 V1 = Data.V1;
 	const float3 V2 = Data.V2;
-	
-	// Computed from the derivative of the bezier curve
-	const float3 Tangent = normalize(DERIVATIVE_QUAD_BEZ(V0, V1, V2, Percentage));
-	const float3 Normal = normalize(cross(Tangent, cross(V1 - V0, V2 - V0)));
-	const float Width = 1;
+	return GetPosition(V0, V1, V2, Data.RotScaleMatrix, VertexId, NumVertices);
+}
 
-	Vertex.Position = QUAD_BEZ(V0, V1, V2, Percentage);
-	Vertex.Position += Tangent * Width * VertexSide;
- 
-	Vertex.TangentX = Tangent;
-	Vertex.TangentZ = float4(Normal, 1);
-	Vertex.UV = float2(0.5 + VertexSide * 0.5, Percentage);
+float3 GetPrevVertexPosition(const FGrassInstance Data, const uint VertexId, const uint NumVertices)
+{
+	const float3 V0 = 0;
+	const float3 V1 = Data.PrevV1;
+	const float3 V2 = Data.PrevV2;
+
+	return GetPosition(V0, V1, V2, Data.RotScaleMatrix, VertexId, NumVertices);
 }

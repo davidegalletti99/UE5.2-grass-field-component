@@ -23,6 +23,15 @@
 #include "RenderGraphResources.h"
 #include "ProceduralMeshComponent.h"
 
+#include "CanvasTypes.h"
+#include "MaterialShader.h"
+#include "StaticMeshResources.h"
+#include "DynamicMeshBuilder.h"
+#include "RenderGraphResources.h"
+#include "RHIGPUReadback.h"
+#include "RenderCore/Public/RenderGraphUtils.h"
+#include "Containers/UnrealString.h"
+
 #define NUM_THREADS_TerrainShader_X 32
 #define NUM_THREADS_TerrainShader_Y 32
 #define NUM_THREADS_TerrainShader_Z 1
@@ -33,23 +42,14 @@
 
 struct COMPUTESHADERS_API FTerrainShaderDispatchParams
 {
-	int X;
-	int Y;
-	int Z;
-
-	float GlobalWorldTime = 0;
-	int32 Width = 256;
-	int32 Height = 256;
-	float MaxAltitude = 100;
+	FUintVector Size;
 	float Spacing = 10;
 	FVector2D Scale = FVector2D(1, 1);
 
 
-	FTerrainShaderDispatchParams(float globalWorldTime, int32 width, int32 height, float maxAltitude, float spacing, FVector2D Scale)
-		: X((int)width / NUM_THREADS_TerrainShader_X), 
-		  Y((int)height / NUM_THREADS_TerrainShader_Y), 
-		  Z(1), GlobalWorldTime(globalWorldTime), 
-		  Width(width), Height(height), MaxAltitude(maxAltitude), Spacing(spacing), Scale(Scale)
+	FTerrainShaderDispatchParams(
+		FUintVector Size, float Spacing, FVector2D Scale)
+		: Size(Size), Spacing(Spacing), Scale(Scale)
 	{}
 };
 
@@ -67,12 +67,10 @@ public:
 	
 	using FPermutationDomain = TShaderPermutationDomain<>;
 
-	BEGIN_SHADER_PARAMETER_STRUCT(FTerrainShaderDispatchParams, COMPUTESHADERS_API)
+	BEGIN_SHADER_PARAMETER_STRUCT(FParameters, COMPUTESHADERS_API)
 
-		SHADER_PARAMETER(float, GlobalWorldTime)
-		SHADER_PARAMETER(int32, Width)
-		SHADER_PARAMETER(int32, Height)
-		SHADER_PARAMETER(float, MaxAltitude)
+		SHADER_PARAMETER(float, Time)
+		SHADER_PARAMETER(FUintVector, Size)
 		SHADER_PARAMETER(float, Spacing)
 		SHADER_PARAMETER(FVector2f, Scale)
 		SHADER_PARAMETER_RDG_BUFFER_UAV(RWStructuredBuffer<FVector3f>, Points)
@@ -82,14 +80,30 @@ public:
 
 	END_SHADER_PARAMETER_STRUCT();
 
-	using FParameters = FTerrainShaderDispatchParams;
 
-	static bool ShouldCompilePermutation(const FGlobalShaderPermutationParameters& Parameters);
+	static bool ShouldCompilePermutation(const FGlobalShaderPermutationParameters& Parameters)
+	{
+		const FPermutationDomain PermutationVector(Parameters.PermutationId);
+
+		return true;
+	}
 
 	static void ModifyCompilationEnvironment(
 		const FGlobalShaderPermutationParameters& Parameters,
-		FShaderCompilerEnvironment& OutEnvironment);
-private:
+		FShaderCompilerEnvironment& OutEnvironment)
+	{
+		FGlobalShader::ModifyCompilationEnvironment(Parameters, OutEnvironment);
+
+		const FPermutationDomain PermutationVector(Parameters.PermutationId);
+
+		// These defines are used in the thread count section of our shader
+		OutEnvironment.SetDefine(TEXT("THREADS_X"), NUM_THREADS_TerrainShader_X);
+		OutEnvironment.SetDefine(TEXT("THREADS_Y"), NUM_THREADS_TerrainShader_Y);
+		OutEnvironment.SetDefine(TEXT("THREADS_Z"), NUM_THREADS_TerrainShader_Z);
+
+		// This shader must support typed UAV load and we are testing if it is supported at runtime using RHIIsTypedUAVLoadSupported
+		OutEnvironment.CompilerFlags.Add(CFLAG_AllowTypedUAVLoads);
+	}
 };
 
 
@@ -128,10 +142,7 @@ class COMPUTESHADERS_API TerrainShaderExecutor
 {
 public:
 	TerrainShaderExecutor();
-	void Execute(float globalWorldTime, 
-		int32 width, int32 height, 
-		float maxAltitude, float spacing, FVector2D scale,
-		UProceduralMeshComponent* meshComponent);
+	static void Execute(FUintVector Size, float Spacing, FVector2D Scale, UProceduralMeshComponent* MeshComponent);
 
 private:
 

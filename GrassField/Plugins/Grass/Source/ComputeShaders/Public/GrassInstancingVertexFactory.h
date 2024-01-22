@@ -11,8 +11,8 @@
 struct FGrassInstancingUserData : FOneFrameResource
 {
 	FRHIShaderResourceView *InstanceBufferSRV;
-	FVector3f LodViewOrigin;
 	uint32 NumVertices;
+	FVector3f LodViewOrigin;
 };
 
 /**
@@ -29,7 +29,7 @@ public:
 	virtual void InitRHI() override;
 	virtual void ReleaseRHI() override;
 	
-	TResourceArray<GrassMesh::FPackedGrassVertex> Vertices;
+	TResourceArray<GrassUtils::FPackedGrassVertex> Vertices;
 };
 
 /*
@@ -68,7 +68,8 @@ struct FGrassInstancingVertexDataType
  * Uniform buffer to hold parameters specific to this vertex factory. Only set up once.
  */
 BEGIN_GLOBAL_SHADER_PARAMETER_STRUCT(FGrassInstancingParameters, )
-// SHADER_PARAMETER_TEXTURE(Texture2D<uint4>, PageTableTexture)
+	// SHADER_PARAMETER_SRV(StructuredBuffer<GrassMesh::FGrassInstance>, InstanceBuffer)
+	// SHADER_PARAMETER(uint32, InstanceNumVertices)
 END_GLOBAL_SHADER_PARAMETER_STRUCT()
 
 typedef TUniformBufferRef<FGrassInstancingParameters> FGrassInstancingBufferRef;
@@ -111,8 +112,8 @@ public:
 private:
 	FGrassInstancingVertexDataType Data;
 
-	FGrassInstancingParameters Params;
 public:
+	FGrassInstancingParameters Params;
 	FGrassInstancingBufferRef UniformBuffer;
 	
 	// Shader parameters is the data passed to our vertex shader
@@ -144,6 +145,6 @@ public:
 protected:
 	// TODO
 	LAYOUT_FIELD(FShaderResourceParameter, InstanceBufferParameter);
-	LAYOUT_FIELD(FShaderParameter, LodViewOriginParameter);
 	LAYOUT_FIELD(FShaderParameter, NumVerticesParameter);
+	LAYOUT_FIELD(FShaderParameter, LodViewOriginParameter);
 };

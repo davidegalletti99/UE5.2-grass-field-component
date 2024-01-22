@@ -32,15 +32,15 @@ protected:
 	UPROPERTY(VisibleAnywhere, Category = Rendering)
 		mutable uint32 DataNum = 0;
 	
-	TResourceArray<GrassMesh::FPackedGrassData> GrassData = nullptr;
+	TResourceArray<GrassUtils::FPackedGrassData> GrassData = nullptr;
 
 public:
 	explicit UGrassMeshSection(const FObjectInitializer& ObjectInitializer = FObjectInitializer::Get());
 
-	bool AddGrassData(GrassMesh::FPackedGrassData& Data);
+	bool AddGrassData(GrassUtils::FPackedGrassData& Data);
 	void Empty();
 	
-	TResourceArray<GrassMesh::FPackedGrassData>& GetGrassData()
+	TResourceArray<GrassUtils::FPackedGrassData>& GetGrassData()
 	{
 		return GrassData;
 	}

@@ -25,12 +25,6 @@ uint ComputeIndexBufferOffset(const uint NumLod)
 }
 */
 
-float3 RotateZ(const float Angle, const float3 Vec)
-{
-    const float3x3 Rot = ROTATION_MATRIX_Z_3X3(Angle);
-    return mul(Rot, Vec);
-}
-
 
 float4x4 ComputeLookAtMatrix(const float3 Eye, const float3 Target, const float3 Up)
 {
@@ -92,7 +86,7 @@ float4x4 ComputeAToBRotationMatrix(const float3 A, const float3 B)
 
     const float3x3 SkewMat = CROSS_PRODUCT_MATRIX_3X3(Vec);
     const float3x3 SkewMat2 = mul(SkewMat, SkewMat);
-    const float3x3 RotationMat =  IDENTITY_MATRIX_3X3 + SkewMat * Sine + SkewMat2 * (1 - Cosine);
+    const float3x3 RotationMat =  IDENTITY_MATRIX_3X3(float3x3, float3) + SkewMat * Sine + SkewMat2 * (1 - Cosine);
     
     return float4x4(
             float4(RotationMat[0], 0),
@@ -118,6 +112,30 @@ float4x4 ComputeTransformMatrixNoScale(FGrassData Data)
     return mul(TranslationMatrix, RotationMatrix);
 }
 
+float3x3 ComputeTransformMatrixNoTranslation(FGrassData Data)
+{
+    const float3 ScaleVector = float3(Data.Width, Data.Width, Data.Height);
+    
+    const float4x4 ScaleMatrix = SCALE_MATRIX_4X4(ScaleVector);
+    const float4x4 RotationMatrix = ComputeTransformRotationMatrix(Data);
+    
+    const float4x4 ScaleAndRotation = mul(RotationMatrix, ScaleMatrix);
+    
+    return float3x3(ScaleAndRotation[0].xyz, ScaleAndRotation[1].xyz, ScaleAndRotation[2].xyz);
+}
+
+float3x3 ComputeInverseTransformMatrixNoTranslation(FGrassData Data)
+{
+    const float3 ScaleVector = float3(1 / Data.Width, 1 / Data.Width, 1 / Data.Height);
+    
+    const float4x4 InvScaleMatrix = SCALE_MATRIX_4X4(ScaleVector);
+    const float4x4 InvRotationMatrix = transpose(ComputeTransformRotationMatrix(Data));
+    
+    const float4x4 ScaleAndRotation = mul(InvScaleMatrix, InvRotationMatrix);
+    
+    return float3x3(ScaleAndRotation[0].xyz, ScaleAndRotation[1].xyz, ScaleAndRotation[2].xyz);
+}
+
 float4x4 ComputeTransformMatrix(FGrassData Data)
 {
     const float3 ScaleVector = float3(Data.Width, Data.Width, Data.Height);
@@ -134,28 +152,18 @@ float4x4 ComputeTransformMatrix(FGrassData Data)
 
 float4x4 ComputeInverseTransformMatrix(FGrassData Data)
 {
-    const float3 ScaleVector = 1 / float3(Data.Width, Data.Width, Data.Height);
+    const float3 ScaleVector = float3(1 / Data.Width, 1 / Data.Width, 1 / Data.Height);
     
-    const float4x4 ScaleMatrix = SCALE_MATRIX_4X4(ScaleVector);
-    const float4x4 RotationMatrix = transpose(ComputeTransformRotationMatrix(Data));
-    const float4x4 TranslationMatrix = TRANSLATION_MATRIX_4X4(-Data.Position);
+    const float4x4 InverseScaleMatrix = SCALE_MATRIX_4X4(ScaleVector);
+    const float4x4 InverseRotationMatrix = transpose(ComputeTransformRotationMatrix(Data));
+    const float4x4 InverseTranslationMatrix = TRANSLATION_MATRIX_4X4(-Data.Position);
 
-    const float4x4 TranslationAndRotation = mul(RotationMatrix, TranslationMatrix);
-    const float4x4 Result = mul(ScaleMatrix, TranslationAndRotation);
+    const float4x4 TranslationAndRotation = mul(InverseRotationMatrix, InverseTranslationMatrix);
+    const float4x4 Result = mul(InverseScaleMatrix, TranslationAndRotation);
     
     return Result;
 }
 
-float4x4 ComputeInverseNoTranslationTransformMatrix(FGrassData Data)
-{
-    const float3 ScaleVector = 1 / float3(Data.Width, Data.Width, Data.Height);
-    
-    const float4x4 ScaleMatrix = SCALE_MATRIX_4X4(ScaleVector);
-    const float4x4 RotationMatrix = transpose(ComputeTransformRotationMatrix(Data));
-    const float4x4 Result = mul(ScaleMatrix, RotationMatrix);
-    
-    return Result;
-}
 
 void ComputeTransformationMatrixAndInverse(
     out float4x4 TransformationMatrix,
@@ -168,14 +176,14 @@ void ComputeTransformationMatrixAndInverse(
 
 void ComputeFrustumPlanes(
         const float4x4 ViewProjectionMatrix,
-        inout float4 Planes[6])
+        inout float4 Planes[5])
 {
     Planes[0] = ViewProjectionMatrix[3] + ViewProjectionMatrix[0];
     Planes[1] = ViewProjectionMatrix[3] - ViewProjectionMatrix[0];
     Planes[2] = ViewProjectionMatrix[3] + ViewProjectionMatrix[1];
     Planes[3] = ViewProjectionMatrix[3] - ViewProjectionMatrix[1];
     Planes[4] = ViewProjectionMatrix[3] + ViewProjectionMatrix[2];
-    Planes[5] = ViewProjectionMatrix[3] - ViewProjectionMatrix[2];
+    //Planes[5] = ViewProjectionMatrix[3] - ViewProjectionMatrix[2];
 }
 
 /** Return false if the AABB is completely outside one of the planes. */

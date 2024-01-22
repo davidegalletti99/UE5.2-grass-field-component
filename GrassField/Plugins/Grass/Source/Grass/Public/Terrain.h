@@ -16,18 +16,11 @@ class GRASS_API ATerrain : public AActor
 {
 	GENERATED_BODY()
 
+	UPROPERTY(EditAnywhere, Category = "Terrain")
+		FUintVector Size = FUintVector(128, 128, 20);
 
 	UPROPERTY(EditAnywhere, Category = "Terrain")
-		int32 Width = 128;
-
-	UPROPERTY(EditAnywhere, Category = "Terrain")
-		int32 Height = 128;
-
-	UPROPERTY(EditAnywhere, Category = "Terrain")
-		float Amplitude = 200;
-
-	UPROPERTY(EditAnywhere, Category = "Terrain")
-		float Spacing = 10;
+		float Spacing = 10.0f;
 
 	UPROPERTY(EditAnywhere, Category = "Terrain")
 		FVector2D Scale = FVector2D(1, 1);

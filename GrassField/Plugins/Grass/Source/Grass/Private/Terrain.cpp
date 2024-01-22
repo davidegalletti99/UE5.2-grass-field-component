@@ -35,7 +35,7 @@ void ATerrain::Tick(float DeltaTime)
 
 void ATerrain::ComputeMesh()
 {
-	TerrainShaderExecutor texec;
-	texec.Execute((float)GetWorld()->TimeSeconds, Width, Height, Amplitude, Spacing, Scale, MeshComponent);
+	TerrainShaderExecutor Texec;
+	Texec.Execute(Size, Spacing, Scale, MeshComponent);
 }
 

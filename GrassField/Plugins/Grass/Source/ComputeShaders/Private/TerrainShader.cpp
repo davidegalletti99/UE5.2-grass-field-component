@@ -1,17 +1,5 @@
 #include "TerrainShader.h"
 
-#include "GlobalShader.h"
-#include "UnifiedBuffer.h"
-#include "CanvasTypes.h"
-#include "MaterialShader.h"
-#include "PixelShaderUtils.h"
-#include "MeshPassProcessor.inl"
-#include "StaticMeshResources.h"
-#include "DynamicMeshBuilder.h"
-#include "RenderGraphResources.h"
-#include "RenderCore/Public/RenderGraphUtils.h"
-#include "Containers/UnrealString.h"
-
 
 // --------------------------------------------------------------
 // ----------------- Compute Shader Declaration -----------------
@@ -25,32 +13,6 @@ DECLARE_CYCLE_STAT(TEXT("TerrainShader Execute"), STAT_TerrainShader_Execute, ST
 //																		   v
 //                        ShaderType             ShaderPath      Shader function name   Type
 IMPLEMENT_GLOBAL_SHADER(FTerrainShader, "/Shaders/TerrainShader.usf", "Main", SF_Compute);
-
-
-bool FTerrainShader::ShouldCompilePermutation(const FGlobalShaderPermutationParameters& Parameters)
-{
-	const FPermutationDomain PermutationVector(Parameters.PermutationId);
-
-	return true;
-}
-
-void FTerrainShader::ModifyCompilationEnvironment(
-	const FGlobalShaderPermutationParameters& Parameters,
-	FShaderCompilerEnvironment& OutEnvironment)
-{
-	FGlobalShader::ModifyCompilationEnvironment(Parameters, OutEnvironment);
-
-	const FPermutationDomain PermutationVector(Parameters.PermutationId);
-
-	// These defines are used in the thread count section of our shader
-	OutEnvironment.SetDefine(TEXT("THREADS_X"), NUM_THREADS_TerrainShader_X);
-	OutEnvironment.SetDefine(TEXT("THREADS_Y"), NUM_THREADS_TerrainShader_Y);
-	OutEnvironment.SetDefine(TEXT("THREADS_Z"), NUM_THREADS_TerrainShader_Z);
-
-	// This shader must support typed UAV load and we are testing if it is supported at runtime using RHIIsTypedUAVLoadSupported
-	OutEnvironment.CompilerFlags.Add(CFLAG_AllowTypedUAVLoads);
-
-}
 
 
 // --------------------------------------------------------------
@@ -70,7 +32,7 @@ void FTerrainShaderInterface::DispatchRenderThread(
 			RDG_EVENT_SCOPE(GraphBuilder, "TerrainShader");
 		RDG_GPU_STAT_SCOPE(GraphBuilder, TerrainShader);
 
-		typename FTerrainShader::FPermutationDomain PermutationVector;
+		FTerrainShader::FPermutationDomain PermutationVector;
 
 		TShaderMapRef<FTerrainShader> ComputeShader(
 			GetGlobalShaderMap(GMaxRHIFeatureLevel), PermutationVector);
@@ -81,7 +43,7 @@ void FTerrainShaderInterface::DispatchRenderThread(
 		if (bIsShaderValid) {
 			FTerrainShader::FParameters* PassParameters = GraphBuilder.AllocParameters<FTerrainShader::FParameters>();
 			
-			const int32 VerticesNumber = Params.Width * Params.Height;
+			const int32 VerticesNumber = Params.Size.X * Params.Size.Y;
 			FRDGBufferRef PointsBuffer = GraphBuilder.CreateBuffer(
 				FRDGBufferDesc::CreateStructuredDesc(sizeof(FVector3f), VerticesNumber), TEXT("PointsBuffer"));
 			
@@ -91,17 +53,14 @@ void FTerrainShaderInterface::DispatchRenderThread(
 			FRDGBufferRef TangentsBuffer = GraphBuilder.CreateBuffer(
 				FRDGBufferDesc::CreateStructuredDesc(sizeof(FVector3f), VerticesNumber), TEXT("TangentsBuffer"));
 
-			const int32 TrianglesNumber = (Params.Width - 1) * (Params.Height - 1) * 2 * 3;
+			const int32 TrianglesNumber = (Params.Size.X - 1) * (Params.Size.Y - 1) * 2 * 3;
 			FRDGBufferRef TrianglesBuffer = GraphBuilder.CreateBuffer(
 				FRDGBufferDesc::CreateStructuredDesc(sizeof(int32), TrianglesNumber), TEXT("TrianglesBuffer"));
-			
 
-			PassParameters->GlobalWorldTime = Params.GlobalWorldTime;
-			PassParameters->Width = Params.Width;
-			PassParameters->Height = Params.Height;
-			PassParameters->MaxAltitude = Params.MaxAltitude;
+			PassParameters->Time = static_cast<float>(FApp::GetCurrentTime());
+			PassParameters->Size = Params.Size;
 			PassParameters->Spacing = Params.Spacing;
-			PassParameters->Scale = FVector2f(Params.Scale);
+			PassParameters->Scale = static_cast<FVector2f>(Params.Scale);
 			PassParameters->Points = GraphBuilder.CreateUAV(
 				FRDGBufferUAVDesc(PointsBuffer, EPixelFormat::PF_R32G32B32F));
 			PassParameters->Normals = GraphBuilder.CreateUAV(
@@ -111,7 +70,10 @@ void FTerrainShaderInterface::DispatchRenderThread(
 			PassParameters->Triangles = GraphBuilder.CreateUAV(
 				FRDGBufferUAVDesc(TrianglesBuffer, EPixelFormat::PF_R32_SINT));
 			
-			FIntVector GroupCount = FIntVector(Params.X, Params.Y, Params.Z);
+			FIntVector GroupCount = FIntVector(
+				FMath::CeilToInt(Params.Size.X / static_cast<float>(NUM_THREADS_TerrainShader_X)),
+				FMath::CeilToInt(Params.Size.Y / static_cast<float>(NUM_THREADS_TerrainShader_Y)),
+				NUM_THREADS_TerrainShader_Z);
 
 			GraphBuilder.AddPass(
 				RDG_EVENT_NAME("ExecuteTerrainShader"),
@@ -125,34 +87,35 @@ void FTerrainShaderInterface::DispatchRenderThread(
 			const int32 VerticesBytes = sizeof(FVector3f) * VerticesNumber;
 			const int32 TrianglesBytes = sizeof(int32) * TrianglesNumber;
 
-			FRHIGPUBufferReadback* GPUPointsBufferReadback = new FRHIGPUBufferReadback(TEXT("ExecuteTerrainShaderPoints"));
-			FRHIGPUBufferReadback* GPUNormalsBufferReadback = new FRHIGPUBufferReadback(TEXT("ExecuteTerrainShaderNormals"));
-			FRHIGPUBufferReadback* GPUTangentsBufferReadback = new FRHIGPUBufferReadback(TEXT("ExecuteTerrainShaderTangents"));
-			FRHIGPUBufferReadback* GPUTrianglesBufferReadback = new FRHIGPUBufferReadback(TEXT("ExecuteTerrainShaderTriangles"));
-			AddEnqueueCopyPass(GraphBuilder, GPUPointsBufferReadback, PointsBuffer, VerticesBytes);
-			AddEnqueueCopyPass(GraphBuilder, GPUNormalsBufferReadback, NormalsBuffer, VerticesBytes);
-			AddEnqueueCopyPass(GraphBuilder, GPUTangentsBufferReadback, TangentsBuffer, VerticesBytes);
-			AddEnqueueCopyPass(GraphBuilder, GPUTrianglesBufferReadback, TrianglesBuffer, TrianglesBytes);
+			FRHIGPUBufferReadback* GPUPointsBufferReadBack = new FRHIGPUBufferReadback(TEXT("ReadBackPoints"));
+			FRHIGPUBufferReadback* GPUNormalsBufferReadBack = new FRHIGPUBufferReadback(TEXT("ReadBackNormals"));
+			FRHIGPUBufferReadback* GPUTangentsBufferReadBack = new FRHIGPUBufferReadback(TEXT("ReadBackTangents"));
+			FRHIGPUBufferReadback* GPUTrianglesBufferReadBack = new FRHIGPUBufferReadback(TEXT("ReadBackTriangles"));
+			
+			AddEnqueueCopyPass(GraphBuilder, GPUPointsBufferReadBack, PointsBuffer, VerticesBytes);
+			AddEnqueueCopyPass(GraphBuilder, GPUNormalsBufferReadBack, NormalsBuffer, VerticesBytes);
+			AddEnqueueCopyPass(GraphBuilder, GPUTangentsBufferReadBack, TangentsBuffer, VerticesBytes);
+			AddEnqueueCopyPass(GraphBuilder, GPUTrianglesBufferReadBack, TrianglesBuffer, TrianglesBytes);
 
-			auto RunnerFunc = [=](auto&& RunnerFunc) -> void
+			auto RunnerFunc = [=](auto&& RunnerFuncRec) -> void
 			{
-				if (GPUPointsBufferReadback->IsReady()
-					&& GPUNormalsBufferReadback->IsReady()
-					&& GPUTangentsBufferReadback->IsReady()
-					&& GPUTrianglesBufferReadback->IsReady())
+				if (GPUPointsBufferReadBack->IsReady()
+					&& GPUNormalsBufferReadBack->IsReady()
+					&& GPUTangentsBufferReadBack->IsReady()
+					&& GPUTrianglesBufferReadBack->IsReady())
 				{
 
-					FVector3f* points = (FVector3f*) GPUPointsBufferReadback->Lock(VerticesBytes);
-					GPUPointsBufferReadback->Unlock();
+					FVector3f* points = static_cast<FVector3f*>(GPUPointsBufferReadBack->Lock(VerticesBytes));
+					GPUPointsBufferReadBack->Unlock();
 					
-					FVector3f* normals = (FVector3f*) GPUNormalsBufferReadback->Lock(VerticesBytes);
-					GPUNormalsBufferReadback->Unlock();
+					FVector3f* normals = static_cast<FVector3f*>(GPUNormalsBufferReadBack->Lock(VerticesBytes));
+					GPUNormalsBufferReadBack->Unlock();
 
-					FVector3f* tangents = (FVector3f*) GPUTangentsBufferReadback->Lock(VerticesBytes);
-					GPUTangentsBufferReadback->Unlock();
+					FVector3f* tangents = static_cast<FVector3f*>(GPUTangentsBufferReadBack->Lock(VerticesBytes));
+					GPUTangentsBufferReadBack->Unlock();
 
-					int32* triangles = (int32*) GPUTrianglesBufferReadback->Lock(TrianglesBytes);
-					GPUTrianglesBufferReadback->Unlock();
+					int32* triangles = static_cast<int32*>(GPUTrianglesBufferReadBack->Lock(TrianglesBytes));
+					GPUTrianglesBufferReadBack->Unlock();
 
 
 					TArray<FVector>* Points = new TArray<FVector>();
@@ -160,9 +123,9 @@ void FTerrainShaderInterface::DispatchRenderThread(
 					TArray<FVector>* Tangents = new TArray<FVector>();
 					for (int i = 0; i < VerticesNumber; i ++)
 					{
-						Points->Add(FVector(points[i]));
-						Normals->Add(FVector(normals[i]));
-						Tangents->Add(FVector(tangents[i]));
+						Points->Add(static_cast<FVector>(points[i]));
+						Normals->Add(static_cast<FVector>(normals[i]));
+						Tangents->Add(static_cast<FVector>(tangents[i]));
 					}
 
 					TArray<int32>* Triangles = new TArray(triangles, TrianglesNumber);
@@ -172,16 +135,16 @@ void FTerrainShaderInterface::DispatchRenderThread(
 							AsyncCallback(*Points, *Normals, *Tangents, *Triangles);
 						});
 
-					delete GPUPointsBufferReadback;
-					delete GPUNormalsBufferReadback;
-					delete GPUTangentsBufferReadback;
-					delete GPUTrianglesBufferReadback;
+					delete GPUPointsBufferReadBack;
+					delete GPUNormalsBufferReadBack;
+					delete GPUTangentsBufferReadBack;
+					delete GPUTrianglesBufferReadBack;
 				}
 				else
 				{
-					AsyncTask(ENamedThreads::ActualRenderingThread, [RunnerFunc]()
+					AsyncTask(ENamedThreads::ActualRenderingThread, [RunnerFuncRec]()
 						{
-							RunnerFunc(RunnerFunc);
+							RunnerFuncRec(RunnerFuncRec);
 						});
 				}
 			};
@@ -225,8 +188,6 @@ void FTerrainShaderInterface::Dispatch(
 	}
 }
 
-
-
 // --------------------------------------------------------------
 // ------------------- Compute Shader Library -------------------
 // --------------------------------------------------------------
@@ -234,12 +195,11 @@ void FTerrainShaderInterface::Dispatch(
 TerrainShaderExecutor::TerrainShaderExecutor()
 {}
 
-
-void TerrainShaderExecutor::Execute(float globalWorldTime, int32 width, int32 height, float maxAltitude, float spacing, FVector2D scale, UProceduralMeshComponent* meshComponent)
+void TerrainShaderExecutor::Execute(FUintVector Size, float Spacing, FVector2D Scale, UProceduralMeshComponent* MeshComponent)
 {
 	// Create a dispatch parameters struct and fill it the input array with our args
 	FTerrainShaderDispatchParams* Params = 
-		new FTerrainShaderDispatchParams(globalWorldTime, width, height, maxAltitude, spacing, scale);
+		new FTerrainShaderDispatchParams(Size, Spacing, Scale);
 
 
 	// Dispatch the compute shader and wait until it completes
@@ -257,8 +217,8 @@ void TerrainShaderExecutor::Execute(float globalWorldTime, int32 width, int32 he
 			{
 				Tangents_T.Add(FProcMeshTangent(T, false));
 			}
-			meshComponent->ClearAllMeshSections();
-			meshComponent->CreateMeshSection(0, Points, Triangles, Normals,
+			MeshComponent->ClearAllMeshSections();
+			MeshComponent->CreateMeshSection(0, Points, Triangles, Normals,
 				TArray<FVector2D>(), TArray<FColor>(), Tangents_T, true);
 
 			delete &Points;
