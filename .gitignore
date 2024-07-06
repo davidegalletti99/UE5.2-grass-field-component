@@ -42,3 +42,6 @@ Thumbs.db
 *.flv
 *.mov
 *.wmv
+
+# exclude /resources files from rules
+!/resources/*
