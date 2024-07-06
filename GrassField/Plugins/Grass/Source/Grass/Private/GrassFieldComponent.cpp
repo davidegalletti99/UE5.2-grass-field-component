@@ -108,6 +108,7 @@ void UGrassFieldComponent::EmptyGrassData()
 {
 	for(const auto& Section : Sections)
 		Section->Empty();
+	TotalBladesCount = 0;
 	
 	MarkRenderStateDirty();
 }
@@ -130,8 +131,8 @@ void UGrassFieldComponent::InitSections()
 	const FVector Extent = LocalBounds.GetExtent();
 
 	DrawDebugBox(GetWorld(), Center, Extent, FColor::Red, false, 10, 0, 10);
-	const double StepX = BoundsSize.X / Dimension;
-	const double StepY = BoundsSize.Y / Dimension;
+	const double StepX = BoundsSize.X / Divisions;
+	const double StepY = BoundsSize.Y / Divisions;
 
 	const double WorldOffX = Center.X - Extent.X;
 	const double WorldOffY = Center.Y - Extent.Y;
@@ -140,11 +141,11 @@ void UGrassFieldComponent::InitSections()
 	PMin.Z = Center.Z - Extent.Z;
 	PMax.Z = Center.Z + Extent.Z;
 
-	for (uint32 i = 0; i < Dimension; i++)
+	for (uint32 i = 0; i < Divisions; i++)
 	{
 		PMin.X = StepX * i + WorldOffX;
 		PMax.X = StepX * (i + 1) + WorldOffX;
-		for (uint32 j = 0; j < Dimension; j++)
+		for (uint32 j = 0; j < Divisions; j++)
 		{
 			PMin.Y = StepY * j + WorldOffY;
 			PMax.Y = StepY * (j + 1) + WorldOffY;
@@ -204,7 +205,10 @@ void UGrassFieldComponent::SampleGrassData()
 			for (const auto& Section : Sections)
 			{
 				if (Section->AddGrassData(Data))
+				{
+					TotalBladesCount++;
 					break;
+				}
 			}
 		}
 		

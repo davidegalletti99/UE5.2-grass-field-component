@@ -9,6 +9,8 @@
 #include "PrimitiveSceneProxy.h"
 #include "DataDrivenShaderPlatformInfo.h"
 
+#include "ConvexVolume.h"
+
 #include "EngineModule.h"
 #include "Engine/Engine.h"
 
@@ -77,6 +79,7 @@ namespace GrassUtils
 	struct COMPUTESHADERS_API FProxyDesc
 	{
 		bool IsValid = false;
+		bool bIsCullingEnabled;
 		TResourceArray<GrassUtils::FPackedGrassData>* GrassData;
 		float CutoffDistance;
 		int NumIndices;
@@ -137,6 +140,7 @@ public:
 	FBox Bounds = FBox(ForceInitToZero);
 	uint32 NumIndices = 0;
 	float CutoffDistance = 0.0f;
+	bool bIsGPUCullingEnabled = true;
 	
 	FGrassInstancingVertexFactory VertexFactory;
 };
@@ -228,6 +232,7 @@ public:
 	FMaterialRelevance MaterialRelevance;
 
 	float CutoffDistance;
+	bool bIsCPUCullingEnabled;
 	FUintVector2 MinMaxLodSteps;
 
 	TMap<uint8, FGrassMeshLodData*> Lods;

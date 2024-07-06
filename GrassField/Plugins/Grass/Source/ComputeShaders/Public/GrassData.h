@@ -188,8 +188,8 @@ namespace GrassUtils
 		const FVector3f InitialPosition = FVector3f(0, 0, 0);
 	    const FVector3f FinalPosition = FVector3f(0, 0, 1) * MaxHeight;
 		
-	    constexpr float Angle = UE_PI * 0.1;
-	    const FVector3f Normal = FVector3f(0, 1, 0);
+	    constexpr float Angle = UE_PI * 0.01;
+	    const FVector3f Normal = FVector3f(0, -1, 0);
 	    const FVector3f Tangent = FVector3f(1, 0, 0);
 		
 		const FVector3f Normal1 = Normal.RotateAngleAxis(Angle, FVector3f(0, 0, 1));
@@ -200,6 +200,14 @@ namespace GrassUtils
 	    
 		VertexBuffer.AddZeroed(LodStep * 2 + 3);
 		IndexBuffer.AddZeroed((LodStep * 2 + 1) * 3);
+
+		FVector3f RP0 {0.5f, 0, 0};
+		FVector3f RP1 {0.4f, 0, 1};
+		FVector3f RP2 {0.0f, 0, 1};
+		
+		FVector3f LP0 {-0.5f, 0, 0};
+		FVector3f LP1 {-0.4f, 0, 1};
+		FVector3f LP2 { 0.0f, 0, 1};
 		
 	    uint32 VertexIndex = 0, PrimitiveIndex = 0;
 	    for (uint32 i = 0; i <= LodStep; i++, VertexIndex += 2, PrimitiveIndex += 6)
@@ -207,24 +215,20 @@ namespace GrassUtils
 	    
 	        const float Percentage = i / static_cast<float>(LodStep + 1);
 	        const float CurrentFactor = QUAD_BEZ(1.0f, 0.85f, 0.0f, Percentage);
-	        const FVector3f CurrentPosition =
-	        	QUAD_BEZ(InitialPosition, FinalPosition, FinalPosition, Percentage);
-	        
-	        const float CurrentHalfWidth = CurrentFactor * MaxWidth / 2;
 	        
 	        FPackedGrassVertex P1, P2;
-	        P1.Position = CurrentPosition - Tangent * CurrentHalfWidth;
+
+	    	P1.Position = QUAD_BEZ(LP0, LP1, LP2, Percentage);
 	        P1.UV = PackUV(FVector2f(0.5 - CurrentFactor, Percentage));
 	        P1.TangentX = PackNormal(Tangent1);
 	        P1.TangentZ = PackNormal(FVector4f(Normal1, 1));
-	    	VertexBuffer[VertexIndex + 0] = P1;
-	    
-	        P2.Position = CurrentPosition + Tangent * CurrentHalfWidth;
+	        VertexBuffer[VertexIndex + 0] = P1;
+	    	
+	        P2.Position = QUAD_BEZ(RP0, RP1, RP2, Percentage);
 	        P2.UV = PackUV(FVector2f(0.5 + CurrentFactor, Percentage));
 	        P2.TangentX = PackNormal(Tangent2);
 	        P2.TangentZ = PackNormal(FVector4f(Normal2, 1));
 	        VertexBuffer[VertexIndex + 1] = P2;
-	    
 	        
 	        if (i < LodStep)
 	        {

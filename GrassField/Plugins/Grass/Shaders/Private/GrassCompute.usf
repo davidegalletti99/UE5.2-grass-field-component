@@ -7,6 +7,7 @@ uint GrassDataSize;
 float4x4 VP_MATRIX;
 float CutoffDistance;
 float3 CameraPosition;
+int bIsCullingEnabled;
 
 // IndirectArgsBuffer
 StructuredBuffer<uint> IndirectArgsBuffer;
@@ -50,10 +51,10 @@ void CullInstancesCS(
     float4 Planes[5];
     ComputeFrustumPlanes(transpose(VP_MATRIX), Planes);
     // const bool InView = IsInViewFrustum(Data.Position, VP_MATRIX, 0.2f);
-    const bool InView = PlaneTestAABB(Planes, Data.Position, float3(Data.Width / 2, Data.Width / 2, Data.Height));
+    const bool InView = PlaneTestAABB(Planes, Data.Position, float3(Data.Width / 2, 1, Data.Height));
     const bool WithinDistance = distance(CameraPosition.xyz, Data.Position) < CutoffDistance;
 
-    if (InView && WithinDistance)
+    if ((InView && WithinDistance) || !bIsCullingEnabled)
     {
         uint WriteIndex;
         InterlockedAdd(RWIndirectArgsBuffer[1], 1, WriteIndex);

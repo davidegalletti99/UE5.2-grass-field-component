@@ -52,10 +52,11 @@ namespace GrassUtils // GrassShaders
 		SHADER_USE_PARAMETER_STRUCT(FCullInstances_CS, FGlobalShader);
 
 		BEGIN_SHADER_PARAMETER_STRUCT(FParameters, )
-			SHADER_PARAMETER(FVector3f, CameraPosition)
-			SHADER_PARAMETER(uint32, GrassDataSize)
-			SHADER_PARAMETER(float, CutoffDistance)
 			SHADER_PARAMETER(FMatrix44f, VP_MATRIX)
+			SHADER_PARAMETER(FVector3f, CameraPosition)
+			SHADER_PARAMETER(int, bIsCullingEnabled)
+			SHADER_PARAMETER(float, CutoffDistance)
+			SHADER_PARAMETER(uint32, GrassDataSize)
 			SHADER_PARAMETER_SRV(StructuredBuffer<FPackedGrassData>, GrassDataBuffer)
 			SHADER_PARAMETER_RDG_BUFFER_UAV(RWStructuredBuffer<FPackedGrassData>, RWCulledGrassDataBuffer)
 			SHADER_PARAMETER_UAV(RWStructuredBuffer<uint32>, RWIndirectArgsBuffer)

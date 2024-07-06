@@ -65,9 +65,15 @@ protected:
 	/** Material applied to each instance. */
 	UPROPERTY(EditAnywhere, Category = Rendering)
 		UMaterialInterface* Material = nullptr;
-
+	
 	UPROPERTY(EditAnywhere, Category = Rendering)
-		uint32 Dimension = 3;
+		bool bIsGPUCullingEnabled = true;
+	
+	UPROPERTY(EditAnywhere, Category = Rendering)
+		bool bIsCPUCullingEnabled = true;
+	
+	UPROPERTY(EditAnywhere, Category = Rendering)
+		uint32 Divisions = 3;
 
 	UPROPERTY(EditAnywhere, Category = Rendering)
 		AActor* Terrain = nullptr;
@@ -77,9 +83,6 @@ protected:
 
 	UPROPERTY(EditAnywhere, Category = Rendering)
 		float Density = 1.0f;
-
-	UPROPERTY(EditAnywhere, Category = Rendering)
-		float Displacement = 10;
 
 	UPROPERTY(EditAnywhere, Category = Rendering)
 		float MaxHeight = 12;
@@ -96,10 +99,11 @@ protected:
 	UPROPERTY(EditAnywhere, Category = Rendering)
 		FUintVector2 LodStepsRange = FUintVector2(0, 6);
 
+	UPROPERTY(VisibleAnywhere, Category = Rendering)
+		uint32 TotalBladesCount = 0;
+	
 	UPROPERTY(EditAnywhere, Category = Rendering)
 		TArray<UGrassMeshSection *> Sections;
-	
-
 public:
 
 	UFUNCTION(CallInEditor, Category = Rendering)
@@ -121,6 +125,10 @@ public:
 	UMaterialInterface* GetMaterial() const { return Material; }
 
 	float GetCutoffDistance() const { return CutoffDistance; }
+	
+	bool IsGPUCullingEnabled() const { return bIsGPUCullingEnabled; }
+	bool IsCPUCullingEnabled() const { return bIsCPUCullingEnabled; }
+	
 	FUintVector2 GetLodStepsRange() const { return LodStepsRange; }
 	TArray<UGrassMeshSection *>& GetMeshSections() { return Sections; }
 

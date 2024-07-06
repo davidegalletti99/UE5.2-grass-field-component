@@ -3,6 +3,7 @@
 
 #include "GrassInstancingSceneProxy.h"
 
+#include "Chaos/Plane.h"
 #include "Kismet/GameplayStatics.h"
 #include "Math/UnitConversion.h"
 
@@ -135,7 +136,7 @@ namespace GrassUtils
 			GroupCount);
 	}
 
-	void Add_CullInstances(
+	void AddPass_CullInstances(
 		FRDGBuilder& GraphBuilder,
 		const FGlobalShaderMap* InGlobalShaderMap,
 		const FVolatileResources& InVolatileResources,
@@ -148,6 +149,7 @@ namespace GrassUtils
 		const GrassUtils::FCullInstances_CS::FPermutationDomain PermutationVector;
 		const TShaderMapRef<GrassUtils::FCullInstances_CS> ComputeShader(InGlobalShaderMap, PermutationVector);
 
+		PassParameters->bIsCullingEnabled = ProxyDesc.bIsCullingEnabled;
 		PassParameters->VP_MATRIX = InViewDesc.ViewProjectionMatrix;
 		PassParameters->CameraPosition = InViewDesc.ViewOrigin;
 		PassParameters->CutoffDistance = ProxyDesc.CutoffDistance;
@@ -205,6 +207,7 @@ FGrassInstancingSceneProxy::FGrassInstancingSceneProxy(UGrassFieldComponent* InC
 	const uint16 NumSections = InComponent->GetMeshSections().Num();
 	MinMaxLodSteps = InComponent->GetLodStepsRange();
 	CutoffDistance = InComponent->GetCutoffDistance();
+	bIsCPUCullingEnabled = InComponent->IsCPUCullingEnabled();
 	
 	Sections.AddZeroed(NumSections);
 	for (uint16 SectionIdx = 0; SectionIdx < NumSections; SectionIdx++)
@@ -215,6 +218,7 @@ FGrassInstancingSceneProxy::FGrassInstancingSceneProxy(UGrassFieldComponent* InC
 			NewSection->GrassData = SrcSection->GetGrassData();
 			NewSection->Bounds = SrcSection->GetBounds();
 			NewSection->CutoffDistance = CutoffDistance;
+			NewSection->bIsGPUCullingEnabled = InComponent->IsGPUCullingEnabled();
 			
 			// Save ref to new section
 			Sections[SectionIdx] = NewSection;
@@ -414,6 +418,7 @@ void FGrassInstancingSceneProxy::GetDynamicMeshElements(
 					continue;
 				
 				const FSceneView* View = Views[ViewIndex];
+				FConvexVolume ViewFrustum = View->ViewFrustum;
 				FVector CullOrigin = MainView->ViewMatrices.GetViewOrigin();
 				// Support the freeze-rendering mode. Use any frozen view state for culling.
 				const FViewMatrices* FrozenViewMatrices = MainView->State != nullptr ?
@@ -421,18 +426,22 @@ void FGrassInstancingSceneProxy::GetDynamicMeshElements(
 				if (FrozenViewMatrices != nullptr)
 				{
 					CullOrigin = FrozenViewMatrices->GetViewOrigin();
+
+					FMatrix ViewMatrix = FrozenViewMatrices->GetViewProjectionMatrix();
+					GetViewFrustumBounds(ViewFrustum, ViewMatrix, true, true);
 				}
 				
 				// Chunk distance e frustum culling
+				if (this->bIsCPUCullingEnabled)
 				{
-					if (!View->ViewFrustum.IntersectBox(
+					if (!ViewFrustum.IntersectBox(
 						Section->Bounds.GetCenter(),
 						Section->Bounds.GetExtent()))
 						continue;
 					
-					float Distance = FVector::DistXY(CullOrigin, Section->Bounds.GetCenter());
-					Distance -= FVector::DistXY(FVector::Zero(), Section->Bounds.GetExtent());
-
+					float Distance = FVector::Dist(CullOrigin, Section->Bounds.GetCenter());
+					Distance -= Section->Bounds.GetExtent().Length();
+				
 					if (Distance > CutoffDistance)
 						continue;
 				}
@@ -641,6 +650,7 @@ void FGrassInstancingRendererExtension::SubmitWork(FRDGBuilder& GraphBuilder)
 		if(bIsNewProxy)
 		{
 			ProxyDesc.IsValid = true;
+			ProxyDesc.bIsCullingEnabled = SectionProxy->bIsGPUCullingEnabled;
 			ProxyDesc.GrassData = &SectionProxy->GrassData;
 			ProxyDesc.CutoffDistance = SectionProxy->CutoffDistance;
 		}
@@ -667,7 +677,7 @@ void FGrassInstancingRendererExtension::SubmitWork(FRDGBuilder& GraphBuilder)
 			ProxyDesc, MainViewDesc, VolatileResources);
 
 		// Build graph
-		GrassUtils::Add_CullInstances(
+		GrassUtils::AddPass_CullInstances(
 			GraphBuilder, GetGlobalShaderMap(GMaxRHIFeatureLevel),
 			VolatileResources, Buffers[WorkDescs[WorkIndex].BufferIndex],
 			ProxyDesc, MainViewDesc);
@@ -678,21 +688,21 @@ void FGrassInstancingRendererExtension::SubmitWork(FRDGBuilder& GraphBuilder)
 			ProxyDesc, MainViewDesc);
 
 		// Gather data per child view
-		const FSceneView* CullView = CullViews[WorkDescs[WorkIndex].CullViewIndex];
-		GrassUtils::FChildViewDesc ChildViewDesc = ChildViewView2Desc.FindOrAdd(CullView);
-		if (!ChildViewDesc.IsValid)
-		{
-			GrassUtils::FViewData CullViewData;
-			GrassUtils::GetViewData(CullView, CullViewData);
-		
-
-			ChildViewDesc.IsValid = true;
-			ChildViewDesc.bIsMainView = CullView == MainView;
-			ChildViewDesc.ViewDebug = MainView;
-			ChildViewDesc.ViewMatrix = FMatrix44f(CullViewData.ViewMatrix);
-			ChildViewDesc.ViewProjectionMatrix = ChildViewDesc.bIsMainView ? MainViewDesc.ViewProjectionMatrix : FMatrix44f(CullViewData.ViewProjectionMatrix);
-			ChildViewDesc.ViewOrigin = ChildViewDesc.bIsMainView ? MainViewDesc.ViewOrigin : FVector3f(CullViewData.ViewOrigin);
-		}
+		// const FSceneView* CullView = CullViews[WorkDescs[WorkIndex].CullViewIndex];
+		// GrassUtils::FChildViewDesc ChildViewDesc = ChildViewView2Desc.FindOrAdd(CullView);
+		// if (!ChildViewDesc.IsValid)
+		// {
+		// 	GrassUtils::FViewData CullViewData;
+		// 	GrassUtils::GetViewData(CullView, CullViewData);
+		//
+		//
+		// 	ChildViewDesc.IsValid = true;
+		// 	ChildViewDesc.bIsMainView = CullView == MainView;
+		// 	ChildViewDesc.ViewDebug = MainView;
+		// 	ChildViewDesc.ViewMatrix = FMatrix44f(CullViewData.ViewMatrix);
+		// 	ChildViewDesc.ViewProjectionMatrix = ChildViewDesc.bIsMainView ? MainViewDesc.ViewProjectionMatrix : FMatrix44f(CullViewData.ViewProjectionMatrix);
+		// 	ChildViewDesc.ViewOrigin = ChildViewDesc.bIsMainView ? MainViewDesc.ViewOrigin : FVector3f(CullViewData.ViewOrigin);
+		// }
 		
 
 		WorkIndex++;
